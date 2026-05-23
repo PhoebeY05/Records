@@ -14,7 +14,7 @@
     {% endfor %}
 
     <h2 class="title">Bulk Import Books</h2>
-    <p class="georgia">Upload a .txt file and choose where the imported books should go.</p>
+    <p class="georgia">Upload a file containing your book list and choose where the imported books should go.</p>
 
     <form action="/import" method="post" enctype="multipart/form-data" class="mt-3">
         <div class="mb-3">
@@ -28,8 +28,8 @@
         </div>
 
         <div class="mb-3">
-            <label for="books_file" class="form-label georgia">Text File (.txt)</label>
-            <input id="books_file" name="books_file" class="form-control" type="file" accept=".txt,text/plain" required>
+            <label for="books_file" class="form-label georgia">File</label>
+            <input id="books_file" name="books_file" class="form-control" type="file" required>
         </div>
 
         <button class="btn grey" type="submit">Import File</button>

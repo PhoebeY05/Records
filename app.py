@@ -832,16 +832,13 @@ def import_books():
         flash("Select a valid category.")
         return redirect("/import")
     if upload is None or upload.filename == "":
-        flash("Select a .txt file to import.")
-        return redirect("/import")
-    if not upload.filename.lower().endswith(".txt"):
-        flash("Only .txt files are supported.")
+        flash("Select a file to import.")
         return redirect("/import")
 
     try:
         content = upload.read().decode("utf-8-sig", errors="ignore")
     except Exception:
-        flash("Could not read file. Please upload a UTF-8 text file.")
+        flash("Could not read file. Please upload a readable file containing book text.")
         return redirect("/import")
 
     lines = content.splitlines()
