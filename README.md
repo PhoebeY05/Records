@@ -24,6 +24,7 @@
 8. Search function that returns books (even if complete name is not entered)
 9. Convenient switching function from "Unfinished" & "To Be Read" to "Completed" and each other
 10. Easily add 1 to number of times reread
+11. Import multiple books from a .txt file to "Completed", "Unfinished" or "To Be Read"
 ## Possible Improvements:
 - Filter by language
 - Input to set number of rereads

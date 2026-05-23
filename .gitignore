@@ -19,6 +19,7 @@ ENV/
 instance/
 books.db
 *.sqlite3
+flask_session/
 
 # macOS
 .DS_Store

@@ -2,7 +2,7 @@ from flask import Flask, redirect, session, render_template, request, flash, url
 from flask_session import Session
 from cs50 import SQL
 from werkzeug.security import check_password_hash, generate_password_hash
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 import random
 import re
 import os
@@ -10,6 +10,7 @@ import os
 
 app = Flask(__name__)
 BOOK_PAGES = {"completed", "unfinished", "tbr"}
+DATE_FORMATS = ["%d %B %Y", "%d %b %Y"]
 
 
 # Configure session to use filesystem (instead of signed cookies)
@@ -20,7 +21,89 @@ Session(app)
 # Configure CS50 Library to use SQLite database
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "books.db")
+if not os.path.exists(DB_PATH):
+    open(DB_PATH, "a").close()
 db = SQL(f"sqlite:///{DB_PATH}")
+
+
+def ensure_schema():
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+            username TEXT NOT NULL,
+            hash TEXT NOT NULL,
+            date NUMERIC NOT NULL
+        )
+        """
+    )
+    db.execute("CREATE UNIQUE INDEX IF NOT EXISTS username ON users (username)")
+
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS tbr (
+            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+            user_id INTEGER NOT NULL,
+            book TEXT NOT NULL,
+            status TEXT NOT NULL,
+            date NUMERIC NOT NULL,
+            notes TEXT,
+            genres TEXT,
+            series TEXT,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+        """
+    )
+
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS unfinished (
+            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+            user_id INTEGER NOT NULL,
+            book TEXT NOT NULL,
+            date NUMERIC NOT NULL,
+            notes TEXT,
+            genres TEXT,
+            status TEXT NOT NULL DEFAULT 'Finished',
+            series TEXT,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+        """
+    )
+
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS completed (
+            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+            user_id INTEGER NOT NULL,
+            book TEXT NOT NULL,
+            date NUMERIC NOT NULL,
+            days INTEGER NOT NULL DEFAULT 0,
+            notes TEXT,
+            reread INTEGER NOT NULL DEFAULT 0,
+            genres TEXT,
+            status TEXT NOT NULL DEFAULT 'Finished',
+            series TEXT,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+        """
+    )
+
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS combined (
+            id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            book TEXT NOT NULL,
+            date NUMERIC NOT NULL,
+            page TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+        """
+    )
+
+
+ensure_schema()
 today = date.today()
 
 
@@ -30,6 +113,602 @@ def get_page_from_referrer():
         if page in referrer:
             return page
     return None
+
+
+def session_user_exists():
+    if "user_id" not in session:
+        return False
+    existing = db.execute("SELECT id FROM users WHERE id = ? LIMIT 1", session["user_id"])
+    return len(existing) > 0
+
+
+def normalize_book_key(title):
+    return re.sub(r"\s+", " ", title).strip().casefold()
+
+
+def merge_notes(note_parts):
+    merged = []
+    seen = set()
+    for part in note_parts:
+        if not part:
+            continue
+        cleaned = clean_freeform_note(part)
+        if cleaned and cleaned.casefold() not in seen:
+            merged.append(cleaned)
+            seen.add(cleaned.casefold())
+    return "; ".join(merged)
+
+
+def parse_date_text(date_text):
+    cleaned = re.sub(r"\s+", " ", date_text).strip().replace(",", "")
+    if not cleaned:
+        return None
+
+    # Strict format: day full-month-name year (e.g. 21 March 2026)
+    if not re.fullmatch(r"\d{1,2}\s+[A-Za-z]+\s+\d{4}", cleaned):
+        return None
+
+    for date_format in DATE_FORMATS:
+        try:
+            return datetime.strptime(cleaned, date_format).date()
+        except ValueError:
+            continue
+    return None
+
+
+def extract_reread_count(text):
+    lowered = text.lower()
+    reread = 0
+    if "read second time" in lowered:
+        reread = max(reread, 1)
+    if "read third time" in lowered:
+        reread = max(reread, 2)
+    if "read fourth time" in lowered:
+        reread = max(reread, 3)
+    numeric = re.search(r"read\s+(\d+)(?:st|nd|rd|th)?\s+time", lowered)
+    if numeric:
+        reread = max(reread, max(int(numeric.group(1)) - 1, 0))
+    return reread
+
+
+def parse_common_metadata(text):
+    notes = []
+    series = None
+
+    notes.extend([n.strip() for n in re.findall(r"\*(.*?)\*", text) if n.strip()])
+    notes.extend([n.strip() for n in re.findall(r"[\{｛](.*?)[\}｝]", text) if n.strip()])
+
+    if "✔" in text:
+        notes.append("Favorite")
+    if re.search(r"#nice\b", text, flags=re.IGNORECASE):
+        notes.append("Would recommend to others")
+
+    author_match = re.search(r"作者[:：]\s*([^\]\)）\}]+)", text)
+    if author_match:
+        notes.append(f"Author disambiguation: {author_match.group(1).strip()}")
+
+    series_match = re.search(r"}\s*(\d+)", text)
+    if series_match:
+        series = f"Series {series_match.group(1)}"
+
+    return notes, series
+
+
+def clean_freeform_note(text):
+    cleaned = re.sub(r"\*(.*?)\*", r"\1", text).strip()
+    cleaned = re.sub(r"[\{｛](.*?)[\}｝]", r"\1", cleaned)
+    cleaned = cleaned.replace("✔️", "").replace("✔", "")
+    cleaned = re.sub(r"#nice\b", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"}\s*\d+", "", cleaned)
+    cleaned = re.sub(r"作者[:：]\s*[^\]\)）\}]+", "", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    return cleaned.strip("; -*")
+
+
+def parse_title(raw_title):
+    notes = []
+    title = raw_title.strip()
+
+    title = re.sub(r"\[.*?\]", "", title).strip()
+
+    if "/" in title:
+        parts = [p.strip() for p in title.split("/") if p.strip()]
+        if parts:
+            title = parts[0]
+            if len(parts) > 1:
+                notes.append(f"AKA: {' / '.join(parts[1:])}")
+
+    return re.sub(r"\s+", " ", title).strip(), notes
+
+
+def has_book_name_prefix(line):
+    stripped = line.strip()
+    if not stripped:
+        return False
+
+    if stripped.startswith("#") or stripped.startswith("*"):
+        return False
+
+    candidate = stripped
+    # Remove leading wrappers like (tag), [tag], {tag} repeatedly.
+    while True:
+        unwrapped = re.sub(r"^\s*[\(\[\{（【｛][^\)\]\}）】｝]{1,40}[\)\]\}）】｝]\s*", "", candidate)
+        if unwrapped == candidate:
+            break
+        candidate = unwrapped.strip()
+
+    # Strip common metadata markers at the very start.
+    candidate = re.sub(r"^(?:⭐+|#\w+|✔+|\*+|作者\s*[:：])\s*", "", candidate, flags=re.IGNORECASE)
+    if not candidate:
+        return False
+
+    return bool(re.search(r"[0-9A-Za-z\u4e00-\u9fff]", candidate))
+
+
+def parse_completed_line(line):
+    if not has_book_name_prefix(line):
+        return None
+
+    stripped = line.strip()
+    raw_title = stripped
+    in_brackets = ""
+    tail = ""
+
+    # Prefer the bracket segment that contains a valid date token.
+    date_bracket = re.search(r"[（(]\s*(\d{1,2}\s+[A-Za-z]+\s+\d{4})(.*?)[]）)]", stripped)
+    if date_bracket:
+        raw_title = stripped[: date_bracket.start()].strip()
+        in_brackets = stripped[date_bracket.start() + 1 : date_bracket.end() - 1].strip()
+        tail = stripped[date_bracket.end() :].strip()
+
+    if not date_bracket:
+        bracket_start = None
+        for ch in ("（", "("):
+            idx = stripped.find(ch)
+            if idx != -1 and (bracket_start is None or idx < bracket_start):
+                bracket_start = idx
+
+        if bracket_start is not None:
+            raw_title = stripped[:bracket_start].strip()
+            remainder = stripped[bracket_start + 1 :]
+            close_idx = None
+            for ch in (")", "）"):
+                idx = remainder.find(ch)
+                if idx != -1 and (close_idx is None or idx < close_idx):
+                    close_idx = idx
+            if close_idx is not None:
+                in_brackets = remainder[:close_idx].strip()
+                tail = remainder[close_idx + 1 :].strip()
+            else:
+                in_brackets = remainder.strip()
+
+    bracket_text = in_brackets or ""
+    date_match = re.search(r"\d{1,2}\s+[A-Za-z]+\s+\d{4}", bracket_text)
+    finish_date = parse_date_text(date_match.group(0)) if date_match else None
+
+    bracket_notes = bracket_text
+    if date_match:
+        bracket_notes = (bracket_text[:date_match.start()] + bracket_text[date_match.end():]).strip()
+    bracket_notes = re.sub(r"\bend\b", "", bracket_notes, flags=re.IGNORECASE).strip()
+
+    if finish_date is None:
+        # Keep the entry and let importer infer missing date from previous entry.
+        pass
+
+    title, title_notes = parse_title(raw_title)
+    if not title:
+        return None
+    common_notes, series = parse_common_metadata(line)
+
+    notes = []
+    notes.extend(title_notes)
+    notes.extend(common_notes)
+    bracket_without_star = re.sub(r"\*.*?\*", "", bracket_notes)
+    tail_without_star = re.sub(r"\*.*?\*", "", tail)
+    cleaned_bracket_notes = clean_freeform_note(bracket_without_star)
+    cleaned_tail = clean_freeform_note(tail_without_star)
+    if cleaned_bracket_notes:
+        notes.append(cleaned_bracket_notes)
+    if cleaned_tail:
+        notes.append(cleaned_tail)
+
+    return {
+        "book": title,
+        "date": finish_date,
+        "notes": notes,
+        "series": series,
+        "reread": extract_reread_count(line),
+    }
+
+
+def parse_tbr_line(line):
+    if not has_book_name_prefix(line):
+        return None
+
+    title_section = re.split(r"[（(]", line, maxsplit=1)[0]
+    title_section = re.split(r"✔|#nice\b|}\s*\d+|\*|\{|｛|⭐", title_section, maxsplit=1, flags=re.IGNORECASE)[0]
+    title, title_notes = parse_title(title_section)
+    if not title:
+        return None
+
+    common_notes, series = parse_common_metadata(line)
+    notes = []
+    notes.extend(title_notes)
+    notes.extend(common_notes)
+
+    return {
+        "book": title,
+        "notes": notes,
+        "series": series,
+    }
+
+
+def parse_unfinished_line(line):
+    if not has_book_name_prefix(line):
+        return None
+
+    match = re.match(r"^\s*(.*?)\s*<\s*(.*?)\s*>\s*(.*)$", line)
+    if match:
+        raw_title, unread_chapter, tail = match.groups()
+        status = f"Unread after {unread_chapter.strip()}"
+        extra = f"Last chapter read: {unread_chapter.strip()}"
+        source_text = f"{line} {tail}"
+    else:
+        raw_title = line
+        status = "Unfinished"
+        extra = ""
+        source_text = line
+
+    title, title_notes = parse_title(raw_title)
+    if not title:
+        return None
+
+    common_notes, series = parse_common_metadata(source_text)
+    notes = []
+    notes.extend(title_notes)
+    notes.extend(common_notes)
+    if extra:
+        notes.append(extra)
+
+    return {
+        "book": title,
+        "status": status,
+        "notes": notes,
+        "series": series,
+    }
+
+
+def insert_combined_row(book_id, user_id, book, book_date, page):
+    db.execute(
+        "INSERT INTO combined (id, user_id, book, date, page) VALUES (?, ?, ?, ?, ?)",
+        book_id,
+        user_id,
+        book,
+        book_date,
+        page,
+    )
+
+
+def undo_import_actions(user_id, actions):
+    for action in reversed(actions):
+        action_type = action.get("action")
+        table = action.get("table")
+        row_id = action.get("id")
+
+        if action_type == "insert":
+            db.execute(f"DELETE FROM {table} WHERE id = ? AND user_id = ?", row_id, user_id)
+            db.execute(
+                "DELETE FROM combined WHERE id = ? AND user_id = ? AND page = ?",
+                row_id,
+                user_id,
+                table,
+            )
+        elif action_type == "update_completed":
+            previous = action.get("previous", {})
+            db.execute(
+                "UPDATE completed SET reread = ?, notes = ? WHERE id = ? AND user_id = ?",
+                previous.get("reread", 0),
+                previous.get("notes"),
+                row_id,
+                user_id,
+            )
+        elif action_type == "update_unfinished":
+            previous = action.get("previous", {})
+            db.execute(
+                "UPDATE unfinished SET status = ?, notes = ?, series = ?, date = ? WHERE id = ? AND user_id = ?",
+                previous.get("status"),
+                previous.get("notes"),
+                previous.get("series"),
+                previous.get("date"),
+                row_id,
+                user_id,
+            )
+            db.execute(
+                "UPDATE combined SET date = ?, book = ? WHERE user_id = ? AND page = 'unfinished' AND id = ?",
+                previous.get("combined_date"),
+                previous.get("combined_book"),
+                user_id,
+                row_id,
+            )
+
+
+def import_completed_books(lines, user_id):
+    aggregated = {}
+    pending_notes = []
+    skipped = 0
+    skipped_entries = []
+    inserted = 0
+    updated = 0
+    undo_actions = []
+
+    last_db_date = db.execute("SELECT date FROM completed WHERE user_id = ? ORDER BY date DESC LIMIT 1", user_id)
+    last_resolved_date = None
+    if last_db_date:
+        try:
+            last_resolved_date = datetime.strptime(str(last_db_date[0]["date"]), "%Y-%m-%d").date()
+        except ValueError:
+            last_resolved_date = None
+
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith("⭐"):
+            note = line.replace("⭐️", "").replace("⭐", "").strip()
+            if note:
+                pending_notes.append(note)
+            continue
+
+        entry = parse_completed_line(line)
+        if entry is None:
+            skipped += 1
+            skipped_entries.append(raw_line)
+            continue
+
+        if entry["date"] is None:
+            if last_resolved_date is None:
+                entry["date"] = today
+            else:
+                entry["date"] = last_resolved_date + timedelta(days=1)
+
+        last_resolved_date = entry["date"]
+
+        if pending_notes:
+            entry["notes"].extend(pending_notes)
+            pending_notes = []
+
+        key = normalize_book_key(entry["book"])
+        if key in aggregated:
+            existing = aggregated[key]
+            if entry["date"] and (existing["date"] is None or entry["date"] < existing["date"]):
+                existing["date"] = entry["date"]
+            existing["notes"].extend(entry["notes"])
+            existing["reread"] += 1 + entry["reread"]
+            if not existing["series"] and entry["series"]:
+                existing["series"] = entry["series"]
+        else:
+            aggregated[key] = entry
+
+    for entry in aggregated.values():
+        existing = db.execute(
+            "SELECT id, reread, notes FROM completed WHERE user_id = ? AND lower(book) = lower(?) LIMIT 1",
+            user_id,
+            entry["book"],
+        )
+        entry_notes = merge_notes(entry["notes"])
+
+        if existing:
+            increment = entry["reread"] if entry["reread"] > 0 else 1
+            merged = merge_notes([existing[0]["notes"], entry_notes])
+            undo_actions.append(
+                {
+                    "action": "update_completed",
+                    "table": "completed",
+                    "id": existing[0]["id"],
+                    "previous": {
+                        "reread": existing[0]["reread"],
+                        "notes": existing[0]["notes"],
+                    },
+                }
+            )
+            db.execute(
+                "UPDATE completed SET reread = ?, notes = ? WHERE id = ? AND user_id = ?",
+                existing[0]["reread"] + increment,
+                merged,
+                existing[0]["id"],
+                user_id,
+            )
+            updated += 1
+            continue
+
+        completed_date = entry["date"] if entry["date"] else date.today()
+        latest = db.execute("SELECT date FROM completed WHERE user_id = ? ORDER BY date DESC LIMIT 1", user_id)
+        days = 0
+        if latest:
+            try:
+                prev = datetime.strptime(str(latest[0]["date"]), "%Y-%m-%d").date()
+                days = max((completed_date - prev).days, 0)
+            except ValueError:
+                days = 0
+
+        book_id = db.execute(
+            "INSERT INTO completed (user_id, book, date, days, notes, reread, status, series) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            user_id,
+            entry["book"],
+            completed_date,
+            days,
+            entry_notes,
+            entry["reread"],
+            "Finished",
+            entry["series"],
+        )
+        insert_combined_row(book_id, user_id, entry["book"], completed_date, "completed")
+        undo_actions.append({"action": "insert", "table": "completed", "id": book_id})
+        inserted += 1
+
+    return inserted, updated, skipped, skipped_entries, undo_actions
+
+
+def import_tbr_books(lines, user_id):
+    aggregated = {}
+    pending_notes = []
+    skipped = 0
+    skipped_entries = []
+    inserted = 0
+    undo_actions = []
+
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith("⭐"):
+            note = line.replace("⭐️", "").replace("⭐", "").strip()
+            if note:
+                pending_notes.append(note)
+            continue
+
+        entry = parse_tbr_line(line)
+        if entry is None:
+            skipped += 1
+            skipped_entries.append(raw_line)
+            continue
+
+        if pending_notes:
+            entry["notes"].extend(pending_notes)
+            pending_notes = []
+
+        key = normalize_book_key(entry["book"])
+        if key not in aggregated:
+            aggregated[key] = entry
+
+    for entry in aggregated.values():
+        existing = db.execute(
+            "SELECT id FROM tbr WHERE user_id = ? AND lower(book) = lower(?) LIMIT 1",
+            user_id,
+            entry["book"],
+        )
+        if existing:
+            continue
+
+        notes_text = merge_notes(entry["notes"])
+        book_date = date.today()
+        book_id = db.execute(
+            "INSERT INTO tbr (user_id, book, status, date, notes, series) VALUES (?, ?, ?, ?, ?, ?)",
+            user_id,
+            entry["book"],
+            "To Be Read",
+            book_date,
+            notes_text,
+            entry["series"],
+        )
+        insert_combined_row(book_id, user_id, entry["book"], book_date, "tbr")
+        undo_actions.append({"action": "insert", "table": "tbr", "id": book_id})
+        inserted += 1
+
+    return inserted, 0, skipped, skipped_entries, undo_actions
+
+
+def import_unfinished_books(lines, user_id):
+    aggregated = {}
+    pending_notes = []
+    skipped = 0
+    skipped_entries = []
+    inserted = 0
+    updated = 0
+    undo_actions = []
+
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith("⭐"):
+            note = line.replace("⭐️", "").replace("⭐", "").strip()
+            if note:
+                pending_notes.append(note)
+            continue
+
+        entry = parse_unfinished_line(line)
+        if entry is None:
+            skipped += 1
+            skipped_entries.append(raw_line)
+            continue
+
+        if pending_notes:
+            entry["notes"].extend(pending_notes)
+            pending_notes = []
+
+        key = normalize_book_key(entry["book"])
+        aggregated[key] = entry
+
+    for entry in aggregated.values():
+        existing = db.execute(
+            "SELECT id, notes FROM unfinished WHERE user_id = ? AND lower(book) = lower(?) LIMIT 1",
+            user_id,
+            entry["book"],
+        )
+        notes_text = merge_notes(entry["notes"])
+        book_date = date.today()
+
+        if existing:
+            merged = merge_notes([existing[0]["notes"], notes_text])
+            previous_row = db.execute(
+                "SELECT status, notes, series, date, book FROM unfinished WHERE id = ? AND user_id = ? LIMIT 1",
+                existing[0]["id"],
+                user_id,
+            )
+            previous_combined = db.execute(
+                "SELECT date, book FROM combined WHERE user_id = ? AND page = 'unfinished' AND id = ? LIMIT 1",
+                user_id,
+                existing[0]["id"],
+            )
+            undo_actions.append(
+                {
+                    "action": "update_unfinished",
+                    "table": "unfinished",
+                    "id": existing[0]["id"],
+                    "previous": {
+                        "status": previous_row[0]["status"] if previous_row else None,
+                        "notes": previous_row[0]["notes"] if previous_row else None,
+                        "series": previous_row[0]["series"] if previous_row else None,
+                        "date": previous_row[0]["date"] if previous_row else None,
+                        "combined_date": previous_combined[0]["date"] if previous_combined else None,
+                        "combined_book": previous_combined[0]["book"] if previous_combined else None,
+                    },
+                }
+            )
+            db.execute(
+                "UPDATE unfinished SET status = ?, notes = ?, series = ?, date = ? WHERE id = ? AND user_id = ?",
+                entry["status"],
+                merged,
+                entry["series"],
+                book_date,
+                existing[0]["id"],
+                user_id,
+            )
+            db.execute(
+                "UPDATE combined SET date = ?, book = ? WHERE user_id = ? AND page = 'unfinished' AND id = ?",
+                book_date,
+                entry["book"],
+                user_id,
+                existing[0]["id"],
+            )
+            updated += 1
+            continue
+
+        book_id = db.execute(
+            "INSERT INTO unfinished (user_id, book, date, notes, status, series) VALUES (?, ?, ?, ?, ?, ?)",
+            user_id,
+            entry["book"],
+            book_date,
+            notes_text,
+            entry["status"],
+            entry["series"],
+        )
+        insert_combined_row(book_id, user_id, entry["book"], book_date, "unfinished")
+        undo_actions.append({"action": "insert", "table": "unfinished", "id": book_id})
+        inserted += 1
+
+    return inserted, updated, skipped, skipped_entries, undo_actions
 
 def switch(original, new, book_id):
     original = original.lower()
@@ -132,6 +811,88 @@ def add():
        
     else:
         return render_template("add.html")
+
+
+@app.route("/import", methods=["GET", "POST"])
+def import_books():
+    if not session_user_exists():
+        session.clear()
+        flash("Your session is no longer valid. Please log in again.")
+        return redirect("/")
+
+    if request.method == "GET":
+        skipped_entries = session.get("import_skipped_entries", [])
+        return render_template("import.html", skipped_entries=skipped_entries)
+
+    category = request.form.get("category")
+    upload = request.files.get("books_file")
+
+    if category not in BOOK_PAGES:
+        flash("Select a valid category.")
+        return redirect("/import")
+    if upload is None or upload.filename == "":
+        flash("Select a .txt file to import.")
+        return redirect("/import")
+    if not upload.filename.lower().endswith(".txt"):
+        flash("Only .txt files are supported.")
+        return redirect("/import")
+
+    try:
+        content = upload.read().decode("utf-8-sig", errors="ignore")
+    except Exception:
+        flash("Could not read file. Please upload a UTF-8 text file.")
+        return redirect("/import")
+
+    lines = content.splitlines()
+    if category == "completed":
+        inserted, updated, skipped, skipped_entries, undo_actions = import_completed_books(lines, session["user_id"])
+    elif category == "tbr":
+        inserted, updated, skipped, skipped_entries, undo_actions = import_tbr_books(lines, session["user_id"])
+    else:
+        inserted, updated, skipped, skipped_entries, undo_actions = import_unfinished_books(lines, session["user_id"])
+
+    session["last_import_undo"] = undo_actions
+    session["import_skipped_entries"] = skipped_entries
+
+    flash(f"Import complete for {category}: inserted {inserted}, updated {updated}, skipped {skipped}.")
+    return redirect("/import")
+
+
+@app.route("/import/undo", methods=["POST"])
+def undo_import():
+    if not session_user_exists():
+        session.clear()
+        flash("Your session is no longer valid. Please log in again.")
+        return redirect("/")
+
+    undo_actions = session.get("last_import_undo", [])
+    if not undo_actions:
+        flash("No import is available to undo.")
+        return redirect("/import")
+
+    undo_import_actions(session["user_id"], undo_actions)
+    session.pop("last_import_undo", None)
+    flash("Last import has been undone.")
+    return redirect("/import")
+
+
+@app.route("/import/clear-db", methods=["POST"])
+def clear_database():
+    if not session_user_exists():
+        session.clear()
+        flash("Your session is no longer valid. Please log in again.")
+        return redirect("/")
+
+    db.execute("DELETE FROM combined")
+    db.execute("DELETE FROM completed")
+    db.execute("DELETE FROM unfinished")
+    db.execute("DELETE FROM tbr")
+    db.execute("DELETE FROM sqlite_sequence WHERE name IN ('combined', 'completed', 'unfinished', 'tbr')")
+
+    session.pop("last_import_undo", None)
+    session.pop("import_skipped_entries", None)
+    flash("Book data cleared.")
+    return redirect("/import")
 
 @app.route("/choose", methods = ["GET", "POST"])
 def choose():
