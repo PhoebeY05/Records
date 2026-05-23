@@ -3,9 +3,16 @@ from flask_session import Session
 from cs50 import SQL
 from werkzeug.security import check_password_hash, generate_password_hash
 from datetime import date, datetime, timedelta
+from html import unescape
+from html.parser import HTMLParser
+import io
 import random
 import re
 import os
+import subprocess
+import tempfile
+import xml.etree.ElementTree as ET
+import zipfile
 
 
 app = Flask(__name__)
@@ -115,6 +122,291 @@ def get_page_from_referrer():
     return None
 
 
+def sanitize_import_text(text):
+    return text.replace("\x00", "")
+
+
+class ImportHTMLParser(HTMLParser):
+    BLOCK_TAGS = {"p", "div", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6"}
+    HEADING_FALLBACK_SIZES = {"h1": 72.0, "h2": 60.0, "h3": 48.0, "h4": 36.0, "h5": 24.0, "h6": 18.0}
+
+    def __init__(self):
+        super().__init__()
+        self.entries = []  # [{"size": float|None, "text": str}]
+        self.current_parts = []
+        self.current_size = None
+        self.in_style = False
+        self.style_buffer = []
+        self.class_sizes = {}
+
+    def _flush(self):
+        text = sanitize_import_text(unescape("".join(self.current_parts))).strip()
+        if text:
+            self.entries.append({"size": self.current_size, "text": text})
+        self.current_parts = []
+        self.current_size = None
+
+    @staticmethod
+    def _extract_size_from_style(style):
+        if not style:
+            return None
+        match = re.search(r"font-size\s*:\s*([\d.]+)", style)
+        if match:
+            return float(match.group(1))
+        match = re.search(r"font\s*:[^;]*?([\d.]+)\s*(?:px|pt|em)", style)
+        if match:
+            return float(match.group(1))
+        return None
+
+    def _size_from_attrs(self, attrs, tag):
+        attrs_dict = dict(attrs)
+        for cls in (attrs_dict.get("class") or "").split():
+            if cls in self.class_sizes:
+                return self.class_sizes[cls]
+        size = self._extract_size_from_style(attrs_dict.get("style"))
+        if size is not None:
+            return size
+        if tag in self.HEADING_FALLBACK_SIZES:
+            return self.HEADING_FALLBACK_SIZES[tag]
+        return None
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "style":
+            self.in_style = True
+            return
+        if tag in self.BLOCK_TAGS:
+            self._flush()
+            self.current_size = self._size_from_attrs(attrs, tag)
+        elif tag == "span":
+            if self.current_size is None:
+                size = self._size_from_attrs(attrs, None)
+                if size is not None:
+                    self.current_size = size
+        elif tag == "br":
+            self._flush()
+
+    def handle_endtag(self, tag):
+        if tag == "style":
+            self.in_style = False
+            self._parse_css("".join(self.style_buffer))
+            self.style_buffer = []
+            return
+        if tag in self.BLOCK_TAGS:
+            self._flush()
+
+    def _parse_css(self, css):
+        for match in re.finditer(r"\.([\w-]+)\s*\{([^}]+)\}", css):
+            size = self._extract_size_from_style(match.group(2))
+            if size is not None:
+                self.class_sizes[match.group(1)] = size
+
+    def handle_data(self, data):
+        if self.in_style:
+            self.style_buffer.append(data)
+        else:
+            self.current_parts.append(data)
+
+    def to_lines(self):
+        return rank_size_entries(self.entries)
+
+
+def rank_size_entries(entries):
+    """Map each entry's font size to a TBR status prefix based on size ranking."""
+    sizes = sorted({e["size"] for e in entries if e["size"] is not None}, reverse=True)
+    if len(sizes) < 2:
+        # No font-size variation — leave raw text so legacy section markers can be used.
+        return [e["text"] for e in entries]
+
+    largest = sizes[0]
+    smallest = sizes[-1]
+    middles = set(sizes[1:-1])
+
+    output = []
+    for entry in entries:
+        text = entry["text"]
+        size = entry["size"]
+        if size == largest:
+            output.append(f"[[STATUS:Finished]]{text}")
+        elif size in middles:
+            output.append(f"[[STATUS:Left Extras]]{text}")
+        elif size == smallest:
+            output.append(f"[[STATUS:Uncompleted]]{text}")
+        else:
+            output.append(text)
+    return output
+
+
+def extract_html_text(file_bytes):
+    with tempfile.NamedTemporaryFile(suffix=".doc", delete=False) as temp_input:
+        temp_input.write(file_bytes)
+        temp_path = temp_input.name
+
+    try:
+        result = subprocess.run(
+            ["textutil", "-convert", "html", "-stdout", temp_path],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        parser = ImportHTMLParser()
+        parser.feed(result.stdout)
+        parser._flush()
+        return "\n".join(parser.to_lines())
+    except Exception:
+        return None
+    finally:
+        try:
+            os.remove(temp_path)
+        except OSError:
+            pass
+
+
+W_NS = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+
+
+def _resolve_docx_style_sizes(styles_root):
+    """Map style_id -> font size in half-points, following basedOn chains."""
+    direct = {}
+    based_on = {}
+    for style in styles_root.findall(f"{W_NS}style"):
+        style_id = style.get(f"{W_NS}styleId")
+        if not style_id:
+            continue
+        sz = style.find(f".//{W_NS}rPr/{W_NS}sz")
+        if sz is not None:
+            val = sz.get(f"{W_NS}val")
+            if val and val.isdigit():
+                direct[style_id] = int(val)
+        bo = style.find(f"{W_NS}basedOn")
+        if bo is not None:
+            based_on[style_id] = bo.get(f"{W_NS}val")
+
+    resolved = {}
+
+    def resolve(sid, seen):
+        if sid in resolved:
+            return resolved[sid]
+        if sid in seen:
+            return None
+        seen.add(sid)
+        if sid in direct:
+            resolved[sid] = direct[sid]
+            return direct[sid]
+        parent = based_on.get(sid)
+        if parent:
+            value = resolve(parent, seen)
+            if value is not None:
+                resolved[sid] = value
+                return value
+        return None
+
+    for sid in set(list(direct.keys()) + list(based_on.keys())):
+        resolve(sid, set())
+    return resolved
+
+
+def extract_docx_text(file_bytes):
+    try:
+        with zipfile.ZipFile(io.BytesIO(file_bytes)) as zf:
+            try:
+                styles_xml = zf.read("word/styles.xml")
+            except KeyError:
+                styles_xml = None
+            try:
+                doc_xml = zf.read("word/document.xml")
+            except KeyError:
+                return None
+    except (zipfile.BadZipFile, KeyError):
+        return None
+
+    style_sizes = {}
+    if styles_xml:
+        try:
+            style_sizes = _resolve_docx_style_sizes(ET.fromstring(styles_xml))
+        except ET.ParseError:
+            style_sizes = {}
+
+    try:
+        body = ET.fromstring(doc_xml).find(f"{W_NS}body")
+    except ET.ParseError:
+        return None
+    if body is None:
+        return None
+
+    default_size = style_sizes.get("Normal") or 24
+    entries = []
+
+    for p in body.iter(f"{W_NS}p"):
+        style_id = None
+        para_size = None
+        pPr = p.find(f"{W_NS}pPr")
+        if pPr is not None:
+            pStyle = pPr.find(f"{W_NS}pStyle")
+            if pStyle is not None:
+                style_id = pStyle.get(f"{W_NS}val")
+            para_sz = pPr.find(f".//{W_NS}rPr/{W_NS}sz")
+            if para_sz is not None:
+                val = para_sz.get(f"{W_NS}val")
+                if val and val.isdigit():
+                    para_size = int(val)
+
+        text_parts = []
+        max_run_size = None
+        for r in p.findall(f"{W_NS}r"):
+            run_size = None
+            run_sz = r.find(f"{W_NS}rPr/{W_NS}sz")
+            if run_sz is not None:
+                val = run_sz.get(f"{W_NS}val")
+                if val and val.isdigit():
+                    run_size = int(val)
+            for child in r:
+                tag = child.tag
+                if tag == f"{W_NS}t" and child.text:
+                    text_parts.append(child.text)
+                elif tag == f"{W_NS}tab":
+                    text_parts.append("\t")
+                elif tag == f"{W_NS}br":
+                    text_parts.append("\n")
+            if run_size is not None:
+                max_run_size = run_size if max_run_size is None else max(max_run_size, run_size)
+
+        text = sanitize_import_text("".join(text_parts)).strip()
+        if not text:
+            continue
+
+        effective = (
+            max_run_size
+            or para_size
+            or (style_sizes.get(style_id) if style_id else None)
+            or default_size
+        )
+        entries.append({"size": float(effective), "text": text})
+
+    if not entries:
+        return None
+    return "\n".join(rank_size_entries(entries))
+
+
+def extract_import_text(upload):
+    file_name = (upload.filename or "").lower()
+    file_bytes = upload.read()
+
+    if file_name.endswith(".docx"):
+        docx_text = extract_docx_text(file_bytes)
+        if docx_text is not None:
+            return docx_text
+
+    if file_name.endswith((".pages", ".rtf", ".doc", ".docx", ".odt", ".html", ".htm", ".webarchive")):
+        rich_text = extract_html_text(file_bytes)
+        if rich_text is not None:
+            return rich_text
+
+    try:
+        return sanitize_import_text(file_bytes.decode("utf-8-sig", errors="ignore"))
+    except Exception:
+        return None
+
+
 def session_user_exists():
     if "user_id" not in session:
         return False
@@ -124,6 +416,15 @@ def session_user_exists():
 
 def normalize_book_key(title):
     return re.sub(r"\s+", " ", title).strip().casefold()
+
+
+def strip_leading_wrappers(text):
+    candidate = sanitize_import_text(text).strip()
+    while True:
+        unwrapped = re.sub(r"^\s*[\(\[\{（【｛][^\)\]\}）】｝]{1,40}[\)\]\}）】｝]\s*", "", candidate)
+        if unwrapped == candidate:
+            return candidate
+        candidate = unwrapped.strip()
 
 
 def merge_notes(note_parts):
@@ -137,6 +438,15 @@ def merge_notes(note_parts):
             merged.append(cleaned)
             seen.add(cleaned.casefold())
     return "; ".join(merged)
+
+
+def find_existing_book_row(table, user_id, title, columns):
+    target_key = normalize_book_key(title)
+    rows = db.execute(f"SELECT {columns} FROM {table} WHERE user_id = ?", user_id)
+    for row in rows:
+        if normalize_book_key(row["book"]) == target_key:
+            return row
+    return None
 
 
 def parse_date_text(date_text):
@@ -207,7 +517,7 @@ def clean_freeform_note(text):
 
 def parse_title(raw_title):
     notes = []
-    title = raw_title.strip()
+    title = strip_leading_wrappers(raw_title)
 
     title = re.sub(r"\[.*?\]", "", title).strip()
 
@@ -222,7 +532,7 @@ def parse_title(raw_title):
 
 
 def has_book_name_prefix(line):
-    stripped = line.strip()
+    stripped = sanitize_import_text(line).strip()
     if not stripped:
         return False
 
@@ -325,7 +635,8 @@ def parse_tbr_line(line):
     if not has_book_name_prefix(line):
         return None
 
-    title_section = re.split(r"[（(]", line, maxsplit=1)[0]
+    title_section = strip_leading_wrappers(line)
+    title_section = re.split(r"[（(]", title_section, maxsplit=1)[0]
     title_section = re.split(r"✔|#nice\b|}\s*\d+|\*|\{|｛|⭐", title_section, maxsplit=1, flags=re.IGNORECASE)[0]
     title, title_notes = parse_title(title_section)
     if not title:
@@ -341,6 +652,28 @@ def parse_tbr_line(line):
         "notes": notes,
         "series": series,
     }
+
+
+def parse_tbr_status_marker(line):
+    stripped = sanitize_import_text(line).strip()
+    if not stripped:
+        return None
+
+    prefix_match = re.match(r"^\[\[STATUS:(Finished|Left Extras|Uncompleted)\]\]", stripped, flags=re.IGNORECASE)
+    if prefix_match:
+        return prefix_match.group(1).title() if prefix_match.group(1).lower() != "left extras" else "Left Extras"
+
+    stripped = re.sub(r"^#{1,6}\s*", "", stripped).strip()
+    if re.fullmatch(r"Finished", stripped, flags=re.IGNORECASE):
+        return "Finished"
+    if re.fullmatch(r"🙏", stripped):
+        return "Left Extras"
+    if re.fullmatch(r"Left Extras", stripped, flags=re.IGNORECASE):
+        return "Left Extras"
+    if re.fullmatch(r"Uncompleted", stripped, flags=re.IGNORECASE):
+        return "Uncompleted"
+
+    return None
 
 
 def parse_unfinished_line(line):
@@ -450,7 +783,7 @@ def import_completed_books(lines, user_id):
             last_resolved_date = None
 
     for raw_line in lines:
-        line = raw_line.strip()
+        line = sanitize_import_text(raw_line).strip()
         if not line:
             continue
         if line.startswith("⭐"):
@@ -490,11 +823,7 @@ def import_completed_books(lines, user_id):
             aggregated[key] = entry
 
     for entry in aggregated.values():
-        existing = db.execute(
-            "SELECT id, reread, notes FROM completed WHERE user_id = ? AND lower(book) = lower(?) LIMIT 1",
-            user_id,
-            entry["book"],
-        )
+        existing = find_existing_book_row("completed", user_id, entry["book"], "id, reread, notes, book")
         entry_notes = merge_notes(entry["notes"])
 
         if existing:
@@ -552,19 +881,32 @@ def import_completed_books(lines, user_id):
 def import_tbr_books(lines, user_id):
     aggregated = {}
     pending_notes = []
+    current_status = "Uncompleted"
     skipped = 0
     skipped_entries = []
     inserted = 0
     undo_actions = []
 
     for raw_line in lines:
-        line = raw_line.strip()
+        line = sanitize_import_text(raw_line).strip()
         if not line:
             continue
         if line.startswith("⭐"):
             note = line.replace("⭐️", "").replace("⭐", "").strip()
             if note:
                 pending_notes.append(note)
+            continue
+
+        prefixed_status = None
+        if line.startswith("[[STATUS:"):
+            prefixed_status = parse_tbr_status_marker(line)
+            line = re.sub(r"^\[\[STATUS:(?:Finished|Left Extras|Uncompleted)\]\]", "", line, flags=re.IGNORECASE).strip()
+            if prefixed_status is not None:
+                current_status = prefixed_status
+
+        status_marker = parse_tbr_status_marker(line)
+        if status_marker is not None:
+            current_status = status_marker
             continue
 
         entry = parse_tbr_line(line)
@@ -579,14 +921,11 @@ def import_tbr_books(lines, user_id):
 
         key = normalize_book_key(entry["book"])
         if key not in aggregated:
+            entry["status"] = current_status
             aggregated[key] = entry
 
     for entry in aggregated.values():
-        existing = db.execute(
-            "SELECT id FROM tbr WHERE user_id = ? AND lower(book) = lower(?) LIMIT 1",
-            user_id,
-            entry["book"],
-        )
+        existing = find_existing_book_row("tbr", user_id, entry["book"], "id, book")
         if existing:
             continue
 
@@ -596,7 +935,7 @@ def import_tbr_books(lines, user_id):
             "INSERT INTO tbr (user_id, book, status, date, notes, series) VALUES (?, ?, ?, ?, ?, ?)",
             user_id,
             entry["book"],
-            "To Be Read",
+            entry.get("status", "Uncompleted"),
             book_date,
             notes_text,
             entry["series"],
@@ -618,7 +957,7 @@ def import_unfinished_books(lines, user_id):
     undo_actions = []
 
     for raw_line in lines:
-        line = raw_line.strip()
+        line = sanitize_import_text(raw_line).strip()
         if not line:
             continue
         if line.startswith("⭐"):
@@ -641,11 +980,7 @@ def import_unfinished_books(lines, user_id):
         aggregated[key] = entry
 
     for entry in aggregated.values():
-        existing = db.execute(
-            "SELECT id, notes FROM unfinished WHERE user_id = ? AND lower(book) = lower(?) LIMIT 1",
-            user_id,
-            entry["book"],
-        )
+        existing = find_existing_book_row("unfinished", user_id, entry["book"], "id, notes, status, series, date, book")
         notes_text = merge_notes(entry["notes"])
         book_date = date.today()
 
@@ -835,13 +1170,12 @@ def import_books():
         flash("Select a file to import.")
         return redirect("/import")
 
-    try:
-        content = upload.read().decode("utf-8-sig", errors="ignore")
-    except Exception:
+    content = extract_import_text(upload)
+    if content is None:
         flash("Could not read file. Please upload a readable file containing book text.")
         return redirect("/import")
 
-    lines = content.splitlines()
+    lines = [sanitize_import_text(line) for line in content.splitlines()]
     if category == "completed":
         inserted, updated, skipped, skipped_entries, undo_actions = import_completed_books(lines, session["user_id"])
     elif category == "tbr":
@@ -928,6 +1262,24 @@ def tbr():
             elif change == 'cross':
                 switch("tbr","unfinished", book_id)
             return redirect("/tbr")
+        elif "status_filter" in request.form:
+            if "clear" in request.form:
+                return redirect("/tbr")
+            status_filter = request.form.get("status_filter")
+            if status_filter in ["Finished", "Left Extras", "Uncompleted"]:
+                books = db.execute(
+                    "SELECT * FROM tbr WHERE user_id = ? AND status = ? ORDER BY date DESC, id DESC",
+                    session["user_id"],
+                    status_filter,
+                )
+            else:
+                books = []
+            return render_template(
+                "tbr.html",
+                books=books,
+                random=session.get("selected", []),
+                selected_status=status_filter,
+            )
         elif "filter" in request.form:
             if "clear" in request.form:
                 return redirect("/tbr")
@@ -938,7 +1290,7 @@ def tbr():
                     books = db.execute(f"SELECT * FROM tbr WHERE {filter} != '' AND user_id = {id}  ORDER BY {filter}")
                 else:
                     books = []
-                return render_template("tbr.html",books=books,random=session["selected"])
+                return render_template("tbr.html",books=books,random=session.get("selected", []),selected_status=request.form.get("status_filter"))
                 
 
     else:
@@ -946,7 +1298,7 @@ def tbr():
         if "tbr" not in referrer:
             session["selected"] =[]
         books = db.execute("SELECT * FROM tbr WHERE user_id = ? ORDER BY date DESC, id DESC", session["user_id"])
-        return render_template("tbr.html",books=books,random=session["selected"])
+        return render_template("tbr.html",books=books,random=session.get("selected", []),selected_status="")
     
 
 @app.route("/completed", methods = ["GET", "POST"])

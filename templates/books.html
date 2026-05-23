@@ -39,6 +39,28 @@
                         <option value="genres">Genres</option>
                     </select>  
                 </div>
+                {% if page == "/tbr" %}
+                <div class="col-4">
+                    <select class="form-select form-select-lg mb-3 grey" aria-label="Large select example" name="status_filter" onchange="this.form.submit()">
+                        <option value="">Filter by status...</option>
+                        {% if selected_status == "Finished" %}
+                        <option value="Finished" selected>Finished</option>
+                        {% else %}
+                        <option value="Finished">Finished</option>
+                        {% endif %}
+                        {% if selected_status == "Left Extras" %}
+                        <option value="Left Extras" selected>Left Extras</option>
+                        {% else %}
+                        <option value="Left Extras">Left Extras</option>
+                        {% endif %}
+                        {% if selected_status == "Uncompleted" %}
+                        <option value="Uncompleted" selected>Uncompleted</option>
+                        {% else %}
+                        <option value="Uncompleted">Uncompleted</option>
+                        {% endif %}
+                    </select>
+                </div>
+                {% endif %}
                 <div class="col-4">
                     <button type="submit" name="clear" class="btn hidden-info">Clear filter</button>
                 </div>
