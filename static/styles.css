@@ -493,3 +493,412 @@ a:hover
     width: 11px;
     content: "";
   }
+
+/* ------------------------------------------------------------------
+   Layout polish: overflow handling for long titles, responsive forms
+   ------------------------------------------------------------------ */
+
+/* Ensure any long/unbreakable text wraps instead of stretching layout */
+.wrap-anywhere,
+.book-title,
+.book-meta,
+.book-name,
+.search-title,
+.modal-title-wrap {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+/* Book list page (tbr / completed / unfinished) */
+.book-list-page {
+    max-width: 1280px;
+}
+
+.book-list-filters .form-select,
+.book-list-filters .btn {
+    min-height: 44px;
+}
+
+.book-list-filters .clear-filter-btn {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+}
+
+.book-table {
+    table-layout: fixed;
+    width: 100%;
+    min-width: 720px;
+    background: rgba(255, 255, 255, 0.92);
+    border-radius: 18px;
+    overflow: hidden;
+    box-shadow: 0 6px 16px rgba(49, 8, 31, 0.05);
+}
+
+.book-table thead th {
+    background: rgba(49, 8, 31, 0.04);
+    color: #31081F;
+    font-family: 'Georgia';
+    border-bottom: 1px solid rgba(49, 8, 31, 0.1);
+    padding: 0.75rem 0.6rem;
+    line-height: 1.25;
+    text-align: center;
+}
+
+.book-table thead th.col-name {
+    text-align: left;
+}
+
+.book-table tbody td {
+    vertical-align: middle;
+    padding: 0.85rem 0.6rem;
+}
+
+.book-table .col-action {
+    width: 120px;
+    text-align: center;
+}
+
+.book-table .col-status {
+    width: 140px;
+}
+
+.book-table .col-date {
+    width: 130px;
+    white-space: nowrap;
+}
+
+.book-table .col-info {
+    width: 72px;
+    text-align: center;
+}
+
+.book-table .col-name {
+    min-width: 0;
+}
+
+.book-name-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+.book-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-family: 'Georgia';
+    color: #31081F;
+    line-height: 1.35;
+}
+
+.book-name-delete {
+    flex: 0 0 auto;
+    background: transparent;
+    border: 0;
+    padding: 0.25rem;
+    border-radius: 8px;
+    transition: background-color 0.15s ease;
+}
+
+.book-name-delete:hover {
+    background: rgba(107, 15, 26, 0.08);
+}
+
+.book-status-badge {
+    display: inline-block;
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+    background: rgba(107, 15, 26, 0.1);
+    color: #6B0F1A;
+    font-size: 0.85rem;
+    font-family: 'Georgia';
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
+
+.book-date {
+    color: #595959;
+    font-family: 'Georgia';
+    font-size: 0.92rem;
+}
+
+.book-info-toggle {
+    background: transparent;
+    border: 0;
+    padding: 0.25rem;
+    border-radius: 8px;
+    transition: background-color 0.15s ease;
+}
+
+.book-info-toggle:hover {
+    background: rgba(49, 8, 31, 0.08);
+}
+
+.book-info-card {
+    position: relative;
+    margin: 1.4rem 1rem 0.8rem auto;
+    border-radius: 3px 3px 18px 3px;
+    border: 0;
+    background: linear-gradient(160deg, #FFF59D 0%, #FFEE85 55%, #FBE26F 100%);
+    padding: 1.1rem 1.35rem 1.1rem 1.35rem;
+    text-align: left;
+    box-shadow:
+        0 1px 1px rgba(49, 8, 31, 0.12),
+        0 10px 20px rgba(49, 8, 31, 0.18),
+        0 16px 28px -10px rgba(49, 8, 31, 0.22),
+        inset 0 1px 0 rgba(255, 255, 255, 0.55);
+    width: min(360px, 100%);
+    transform: rotate(-1.2deg);
+    transform-origin: top right;
+}
+
+.book-info-card::before {
+    content: "";
+    position: absolute;
+    top: -10px;
+    right: 28px;
+    width: 96px;
+    height: 22px;
+    background: linear-gradient(180deg, rgba(245, 245, 245, 0.65), rgba(210, 210, 210, 0.55));
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    box-shadow: 0 2px 4px rgba(49, 8, 31, 0.12);
+    transform: rotate(3deg);
+    pointer-events: none;
+}
+
+.book-info-card::after {
+    content: "";
+    position: absolute;
+    inset: auto 0 0 auto;
+    width: 32px;
+    height: 32px;
+    background: linear-gradient(135deg, transparent 50%, rgba(49, 8, 31, 0.07) 50%, rgba(49, 8, 31, 0.12) 100%);
+    border-bottom-right-radius: 18px;
+    pointer-events: none;
+}
+
+.book-info-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem 1.25rem;
+    margin: 0;
+}
+
+.book-info-pair {
+    display: flex;
+    align-items: baseline;
+    gap: 0.55rem;
+    min-width: 0;
+}
+
+.book-info-pair dt {
+    margin: 0;
+    color: #6B0F1A;
+    font-family: 'Georgia';
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+}
+
+.book-info-pair dd {
+    margin: 0;
+    color: #31081F;
+    font-family: 'Georgia';
+    font-size: 0.95rem;
+    overflow-wrap: anywhere;
+}
+
+.book-info-notes {
+    margin-top: 0.9rem;
+    padding-top: 0.7rem;
+    border-top: 1px solid rgba(49, 8, 31, 0.1);
+}
+
+.book-info-notes-label {
+    margin: 0 0 0.35rem 0;
+    color: #6B0F1A;
+    font-family: 'Georgia';
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.book-info-notes-text {
+    margin: 0;
+    color: #31081F;
+    font-family: 'Georgia';
+    line-height: 1.55;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+
+.book-action-btn {
+    background: transparent;
+    border: 0;
+    font-size: 1.6rem;
+    line-height: 1;
+    padding: 0.25rem 0.5rem;
+    border-radius: 10px;
+    transition: background-color 0.15s ease;
+}
+
+.book-action-btn:hover {
+    background: rgba(107, 15, 26, 0.08);
+}
+
+.choose-fab {
+    position: sticky;
+    bottom: 1.5rem;
+    margin: 1.5rem 0;
+    text-align: right;
+}
+
+.choose-fab .btn {
+    padding: 0.7rem 1.4rem;
+    border-radius: 999px;
+    box-shadow: 0 8px 18px rgba(107, 15, 26, 0.3);
+}
+
+/* Random book modal */
+.random-modal .modal-content {
+    border-radius: 20px;
+    overflow: hidden;
+}
+
+.random-modal .modal-header {
+    background: linear-gradient(135deg, rgba(107, 15, 26, 0.95), rgba(49, 8, 31, 0.92));
+    color: #F8F8F2;
+    border-bottom: 0;
+}
+
+.random-modal .modal-header .btn-close {
+    filter: invert(1) grayscale(1) brightness(2);
+}
+
+.random-modal .modal-title-wrap {
+    color: #31081F;
+    font-family: 'Georgia';
+    margin: 0 0 1rem 0;
+    font-size: clamp(1.6rem, 3.5vw, 2.2rem);
+    line-height: 1.2;
+}
+
+.random-modal dl {
+    margin: 0;
+}
+
+.random-modal dt {
+    color: #6B0F1A;
+    font-size: 0.78rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-top: 0.6rem;
+}
+
+.random-modal dd {
+    color: #31081F;
+    margin: 0.1rem 0 0 0;
+    overflow-wrap: anywhere;
+}
+
+/* Search results */
+.search-hero {
+    background: linear-gradient(135deg, rgba(107, 15, 26, 0.95), rgba(49, 8, 31, 0.92));
+    color: #F8F8F2;
+    padding: 1.5rem;
+    border-radius: 0 0 24px 24px;
+    margin-bottom: 1.5rem;
+}
+
+.search-hero h1 {
+    margin: 0;
+    font-size: clamp(1.4rem, 3vw, 2rem);
+    overflow-wrap: anywhere;
+    font-family: 'Georgia';
+}
+
+.search-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1rem;
+}
+
+.search-card {
+    border-radius: 18px;
+    border: 1px solid rgba(49, 8, 31, 0.08);
+    background: #fff;
+    padding: 1rem 1.1rem;
+    box-shadow: 0 6px 16px rgba(49, 8, 31, 0.05);
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.search-card .search-title {
+    color: #31081F;
+    font-family: 'Georgia';
+    font-size: 1.05rem;
+    margin: 0;
+}
+
+.search-card .search-meta {
+    color: #595959;
+    font-size: 0.85rem;
+}
+
+.search-card .search-status {
+    display: inline-block;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    background: rgba(107, 15, 26, 0.1);
+    color: #6B0F1A;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    align-self: flex-start;
+}
+
+/* Centered form panels (login / register / add) */
+.form-panel {
+    max-width: 480px;
+    margin: 2.5rem auto;
+    background: rgba(255, 255, 255, 0.92);
+    border-radius: 22px;
+    box-shadow: 0 12px 28px rgba(49, 8, 31, 0.1);
+    padding: 2rem 1.75rem;
+}
+
+.form-panel-wide {
+    max-width: 640px;
+}
+
+.form-panel h2,
+.form-panel h3 {
+    color: #31081F;
+    font-family: 'Georgia';
+}
+
+.form-panel .form-actions {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 1.25rem;
+}
+
+@media (max-width: 575px) {
+    .form-panel {
+        margin: 1.25rem 1rem;
+        padding: 1.5rem 1.1rem;
+    }
+}
+
+/* Generic helpers */
+.no-overflow {
+    min-width: 0;
+}
+
+.table-responsive-wrap {
+    overflow-x: auto;
+}

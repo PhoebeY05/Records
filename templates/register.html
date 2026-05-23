@@ -1,27 +1,26 @@
 {% extends "unknown_user.html" %}
 
 {% block title %}
-    Log In
+    Register
 {% endblock %}
 
 {% block main %}
-<div class=""container">
-    <form action="/register" method="post">
-        <div>
-            <div class="form-floating mx-auto mt-5 w-25 ">
-                <input autocomplete="off" type="text" class="form-control" id="floatingInput" name="username" Placeholder="Username">
-                <label for="floatingInput ">Username</label>
-            </div>
-            <div class="form-floating mx-auto mt-3 w-25">
-                <input type="password" class="form-control" id="floatingPassword" name="password" placeholder="Password">
-                <label for="floatingPassword">Password</label>
-            </div>
-            <div class="form-floating mx-auto mt-3 w-25">
-                <input type="password" class="form-control" id="floatingPassword" name="confirmation" placeholder="Confirm Password">
-                <label for="floatingPassword"> Confirm Password</label>
-            </div>
-            <button class="btn btn-primary ms-5 mt-5 login-middle" type="submit">Register</button>  
-        </div>    
-    </form>
-</div> 
+<form action="/register" method="post" class="form-panel">
+    <h2 class="mb-4 text-center">Create an account</h2>
+    <div class="form-floating mb-3">
+        <input autocomplete="off" type="text" class="form-control" id="floatingInput" name="username" placeholder="Username">
+        <label for="floatingInput">Username</label>
+    </div>
+    <div class="form-floating mb-3">
+        <input type="password" class="form-control" id="floatingPassword" name="password" placeholder="Password">
+        <label for="floatingPassword">Password</label>
+    </div>
+    <div class="form-floating mb-3">
+        <input type="password" class="form-control" id="floatingConfirmation" name="confirmation" placeholder="Confirm Password">
+        <label for="floatingConfirmation">Confirm Password</label>
+    </div>
+    <div class="form-actions">
+        <button class="btn btn-primary" type="submit">Register</button>
+    </div>
+</form>
 {% endblock %}

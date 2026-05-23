@@ -7,19 +7,29 @@
 {% block main %}
     {% block set %}{% endblock %}
     {% if random is defined and random|length > 0 %}
-    <div class="modal" tabindex="-1" id="random">
-        <div class="modal-dialog">
+    <div class="modal random-modal" tabindex="-1" id="random">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
           <div class="modal-content">
             <div class="modal-header">
-              <h5 class="modal-title">Random book chosen is:</h5>
+              <h5 class="modal-title">Random book chosen</h5>
               <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-              <h1 class="georgia"> ❗️{{random.book}}❗️</h1>
-              {% if random.status != "None" and random.status != ""%}<h5 class="">Book status is <em>{{random.status}}</em></h5>{% endif %}
-              {% if random.genres != "None" and random.genres != "" %}<h5>Genres of book: <em>{{random.genres}}</em></h5>{% endif %}
-              {% if random.notes != "None" and random.notes != "" %}<h5>Book notes: <em>{{random.notes}}</em></h5>{% endif %}
-              {% if random.series != "" %}<h5>Part of <em>{{random.series}}</em> series</h5>{% endif %}
+              <h2 class="modal-title-wrap">❗️ {{random.book}} ❗️</h2>
+              <dl>
+                {% if random.status and random.status != "None" %}
+                  <dt>Status</dt><dd>{{random.status}}</dd>
+                {% endif %}
+                {% if random.genres and random.genres != "None" %}
+                  <dt>Genres</dt><dd>{{random.genres}}</dd>
+                {% endif %}
+                {% if random.notes and random.notes != "None" %}
+                  <dt>Notes</dt><dd>{{random.notes}}</dd>
+                {% endif %}
+                {% if random.series %}
+                  <dt>Series</dt><dd>{{random.series}}</dd>
+                {% endif %}
+              </dl>
             </div>
             <div class="modal-footer">
               <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
@@ -28,120 +38,110 @@
         </div>
       </div>
     {% endif %}
-    <div class="container mt-5">
-        <form action={{page}} method="post" name="options">
-            <div class="row justify-content-start">
-                <div class="col-4">
-                    <select class="form-select form-select-lg mb-3 grey " aria-label="Large select example" name="filter" onchange="this.form.submit()">
-                        <option selected>Filter by existence of...</option>
+
+    <div class="container book-list-page mt-4">
+        <h1 class="title mb-4">{{title}}</h1>
+
+        <form action="{{page}}" method="post" name="options" class="book-list-filters mb-3">
+            <div class="row g-2 align-items-stretch">
+                <div class="col-12 col-md">
+                    <select class="form-select grey" name="filter" onchange="this.form.submit()">
+                        <option value="" selected>Filter by existence of...</option>
                         <option value="series">Series</option>
                         <option value="notes">Notes</option>
                         <option value="genres">Genres</option>
-                    </select>  
-                </div>
-                {% if page == "/tbr" %}
-                <div class="col-4">
-                    <select class="form-select form-select-lg mb-3 grey" aria-label="Large select example" name="status_filter" onchange="this.form.submit()">
-                        <option value="">Filter by status...</option>
-                        {% if selected_status == "Finished" %}
-                        <option value="Finished" selected>Finished</option>
-                        {% else %}
-                        <option value="Finished">Finished</option>
-                        {% endif %}
-                        {% if selected_status == "Left Extras" %}
-                        <option value="Left Extras" selected>Left Extras</option>
-                        {% else %}
-                        <option value="Left Extras">Left Extras</option>
-                        {% endif %}
-                        {% if selected_status == "Uncompleted" %}
-                        <option value="Uncompleted" selected>Uncompleted</option>
-                        {% else %}
-                        <option value="Uncompleted">Uncompleted</option>
-                        {% endif %}
                     </select>
                 </div>
-                {% endif %}
-                <div class="col-4">
-                    <button type="submit" name="clear" class="btn hidden-info">Clear filter</button>
+                <div class="col-12 col-md">
+                    <select class="form-select grey" name="status_filter" onchange="this.form.submit()">
+                        <option value="">Filter by status...</option>
+                        {% for s in status_options %}
+                            <option value="{{s}}" {% if selected_status == s %}selected{% endif %}>{{s}}</option>
+                        {% endfor %}
+                    </select>
                 </div>
-              </div>
-                   
+                <div class="col-12 col-md-auto">
+                    <button type="submit" name="clear" value="1" class="btn hidden-info clear-filter-btn w-100">Clear filter</button>
+                </div>
+            </div>
         </form>
-            
-        <div class="container text-center">
-            <table class="table">
+
+        <div class="table-responsive-wrap">
+            <table class="table book-table align-middle">
                 <thead>
                     <tr>
-                        <th scope="col">{{ticked}}</th>
-                        <th scope="col">Name</th>
-                        <th scope="col">Status</th>
-                        <th scope="col">Date Added</th>
-                        <th scope="col"></th>
-                        <th scope="col">{{crossed}}</th>
+                        <th scope="col" class="col-action">{{ticked}}</th>
+                        <th scope="col" class="col-name">Name</th>
+                        <th scope="col" class="col-status">Status</th>
+                        <th scope="col" class="col-date">Date Added</th>
+                        <th scope="col" class="col-info">Info</th>
+                        <th scope="col" class="col-action">{{crossed}}</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {%for book in books%}
-                        {% set id = '#' ~ loop.index %}
-                        <tr class="align-middle pb-0">
-                            <td>
+                    {% for book in books %}
+                        {% set collapse_id = 'book-info-' ~ loop.index %}
+                        <tr>
+                            <td class="col-action">
                                 {% block checked scoped %}{% endblock %}
-                                
                             </td>
-                            <td>
-                                <div class="container text-center">
-                                    <div class="row justify-content-center ">
-                                        <div class="col-4 mt-2">
-                                            {{book.book}}
-                                        </div>
-                                        <div class="col-4">
-                                            <form action="/delete" method="post">
-                                                <button class="border-0 white" type="submit" name="book" value={{book.id}}>
-                                                    <img src="../static/delete.png" alt="delete" height="30" width="30">
-                                                </button>
-                                            </form>
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                            </td>
-                            <td>{{book.status}}</td>
-                            <td>{{book.date}}</td>
-                            <td>
-                                <div class="row align-middle">
-                                    <div class="col ">
-                                        <button class="btn mt-4half mt-5 d-inline-flex " data-bs-toggle="collapse" data-bs-target= {{id}} aria-expanded="false" aria-controls="collapseWidthExample">
-                                            <img src="../static/more.png" alt="More Info" height="30" width="30" >
+                            <td class="col-name">
+                                <div class="book-name-cell">
+                                    <span class="book-name">{{book.book}}</span>
+                                    <form action="/delete" method="post" class="m-0">
+                                        <button class="book-name-delete" type="submit" name="book" value="{{book.id}}" aria-label="Delete">
+                                            <img src="../static/delete.png" alt="delete" height="22" width="22">
                                         </button>
-                                    </div>
-                                    <div class="col d-inline-flex ">
-                                        <div style="min-height: 100px;">
-                                            <div class="collapse collapse-horizontal" id={{loop.index}}>
-                                                <div class="card card-body text-start" style="width: 300px;">
-                                                    <h6> Date added: <em>{{book.date}}</em></h6>
-                                                    <h6>Genres: <em>{{book.genres}}</em></h6>
-                                                    <h6> Notes: <em>{{book.notes}}</em></h6>
-                                                    <h6> Series: <em>{{book.series}}</em></h6>
-                                                    {% if book.reread is defined %}<h6> Reread <em>{{book.reread}} time(s)</em></h6>{% endif %}
-                                                    {% if book.days is defined %}<h6> Days taken to finish: <em>{{book.days}}</em></h6>{% endif %}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
+                                    </form>
                                 </div>
                             </td>
-                            <td>
-                                {% block crossed scoped%}{% endblock %}     
+                            <td class="col-status">
+                                {% if book.status %}
+                                  <span class="book-status-badge">{{book.status}}</span>
+                                {% endif %}
+                            </td>
+                            <td class="col-date">
+                                <span class="book-date">{{book.date}}</span>
+                            </td>
+                            <td class="col-info">
+                                <button class="book-info-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#{{collapse_id}}" aria-expanded="false" aria-controls="{{collapse_id}}">
+                                    <img src="../static/more.png" alt="More Info" height="26" width="26">
+                                </button>
+                            </td>
+                            <td class="col-action">
+                                {% block crossed scoped %}{% endblock %}
+                            </td>
+                        </tr>
+                        <tr class="collapse" id="{{collapse_id}}">
+                            <td colspan="6" class="bg-transparent border-0 pt-0">
+                                <div class="book-info-card">
+                                    <dl class="book-info-meta">
+                                        <div class="book-info-pair"><dt>Date added</dt><dd>{{book.date}}</dd></div>
+                                        <div class="book-info-pair"><dt>Genres</dt><dd>{{book.genres or "—"}}</dd></div>
+                                        <div class="book-info-pair"><dt>Series</dt><dd>{{book.series or "—"}}</dd></div>
+                                        {% if book.reread is defined %}<div class="book-info-pair"><dt>Rereads</dt><dd>{{book.reread}} time(s)</dd></div>{% endif %}
+                                        {% if book.days is defined %}<div class="book-info-pair"><dt>Days to finish</dt><dd>{{book.days}}</dd></div>{% endif %}
+                                    </dl>
+                                    <div class="book-info-notes">
+                                        <p class="book-info-notes-label">Notes</p>
+                                        <p class="book-info-notes-text">{{book.notes or "—"}}</p>
+                                    </div>
+                                </div>
                             </td>
                         </tr>
                     {% endfor %}
-                </table>
-            </div>
+                </tbody>
+            </table>
+        </div>
+
+        {% if books|length == 0 %}
+            <p class="grey-text text-center my-5">No books yet — add one or import a file to get started.</p>
+        {% endif %}
+
+        <div class="choose-fab">
+            <form action="/choose" method="post">
+                <button id="choose" type="submit" class="red border-0 btn">Choose a Book</button>
+            </form>
+        </div>
     </div>
-<form action="/choose" method="/post" >
-    <input id="choose" type="submit" class="red border-0 right me-5 mb-5 btn" value="Choose a Book"/>
-</form>
-
-  
-
 {% endblock %}

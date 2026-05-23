@@ -122,6 +122,28 @@ def get_page_from_referrer():
     return None
 
 
+def get_status_options(category, user_id):
+    rows = db.execute(
+        f"SELECT DISTINCT status FROM {category} WHERE user_id = ? AND status IS NOT NULL AND status != '' ORDER BY status",
+        user_id,
+    )
+    return [r["status"] for r in rows]
+
+
+def query_books_with_filters(category, user_id, status_filter=None, existence_filter=None):
+    query = f"SELECT * FROM {category} WHERE user_id = ?"
+    params = [user_id]
+    if status_filter:
+        query += " AND status = ?"
+        params.append(status_filter)
+    if existence_filter in ("genres", "series", "notes"):
+        query += f" AND {existence_filter} IS NOT NULL AND {existence_filter} != ''"
+        query += f" ORDER BY {existence_filter}"
+    else:
+        query += " ORDER BY date DESC, id DESC"
+    return db.execute(query, *params)
+
+
 def sanitize_import_text(text):
     return text.replace("\x00", "")
 
@@ -631,11 +653,13 @@ def parse_completed_line(line):
     }
 
 
-def parse_tbr_line(line):
+def parse_tbr_line(line, status=None):
     if not has_book_name_prefix(line):
         return None
 
     title_section = strip_leading_wrappers(line)
+    if status == "Left Extras":
+        title_section = re.sub(r"^\s*🙏️?\s*", "", title_section)
     title_section = re.split(r"[（(]", title_section, maxsplit=1)[0]
     title_section = re.split(r"✔|#nice\b|}\s*\d+|\*|\{|｛|⭐", title_section, maxsplit=1, flags=re.IGNORECASE)[0]
     title, title_notes = parse_title(title_section)
@@ -909,7 +933,7 @@ def import_tbr_books(lines, user_id):
             current_status = status_marker
             continue
 
-        entry = parse_tbr_line(line)
+        entry = parse_tbr_line(line, current_status)
         if entry is None:
             skipped += 1
             skipped_entries.append(raw_line)
@@ -1109,19 +1133,19 @@ def home():
     else:
         return render_template("home.html", current_year=current_year)
 
-@app.route("/add", methods = ["GET", "POST"])
+@app.route("/add", methods=["GET", "POST"])
 def add():
     if request.method == "POST":
         name = request.form.get("book")
-        page = request.form.get("destination")
+        category = request.form.get("category")
         status = request.form.get("status")
         genres = request.form.get("genres")
         notes = request.form.get("notes")
         series = request.form.get("series")
         latest = db.execute("SELECT * FROM completed WHERE user_id = ? ORDER BY date DESC LIMIT 1", session["user_id"])
-        if name != "" and page != "Select page" and status != "":    
+        if name != "" and category in BOOK_PAGES and status != "":
             book_id = db.execute(
-                f"INSERT INTO {page} (user_id, book, date, notes, genres, status, series) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                f"INSERT INTO {category} (user_id, book, date, notes, genres, status, series) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 session["user_id"],
                 name,
                 today,
@@ -1131,20 +1155,20 @@ def add():
                 series,
             )
             flash('Add Book Success!')
-            db.execute("INSERT INTO combined (id, user_id, book, date, page) VALUES (?,?,?,?,?)", book_id, session["user_id"], name, today, page)
-            if page == "completed":
+            db.execute("INSERT INTO combined (id, user_id, book, date, page) VALUES (?,?,?,?,?)", book_id, session["user_id"], name, today, category)
+            if category == "completed":
                 if latest == []:
-                    days = 0   
+                    days = 0
                 else:
                     date_format = '%Y-%m-%d'
                     prev = datetime.strptime(latest[0]["date"], date_format).date()
                     days = (today - prev).days
-                db.execute("UPDATE completed SET days = ? WHERE id = ?", days, book_id)     
-            return redirect("/add")  
+                db.execute("UPDATE completed SET days = ? WHERE id = ?", days, book_id)
+            return redirect("/add")
         else:
-                flash('Add Book Failed! Some fields were not filled in.')
-                return redirect("/add") 
-       
+            flash('Add Book Failed! Some fields were not filled in.')
+            return redirect("/add")
+
     else:
         return render_template("add.html")
 
@@ -1249,7 +1273,32 @@ def delete():
     db.execute("DELETE FROM combined WHERE page = ? AND id = ? AND user_id = ?", page, id, session["user_id"])
     return redirect(f"/{page}")
 
-@app.route("/tbr", methods = ["GET", "POST"])
+def render_category_page(category, template_name):
+    referrer = request.headers.get("Referer") or ""
+    if category not in referrer:
+        session["selected"] = []
+
+    status_filter = (request.form.get("status_filter") or "").strip() if request.method == "POST" else ""
+    existence_filter = (request.form.get("filter") or "").strip() if request.method == "POST" else ""
+
+    if status_filter or existence_filter:
+        books = query_books_with_filters(category, session["user_id"], status_filter, existence_filter)
+    else:
+        books = db.execute(
+            f"SELECT * FROM {category} WHERE user_id = ? ORDER BY date DESC, id DESC",
+            session["user_id"],
+        )
+
+    return render_template(
+        template_name,
+        books=books,
+        random=session.get("selected", []),
+        selected_status=status_filter,
+        status_options=get_status_options(category, session["user_id"]),
+    )
+
+
+@app.route("/tbr", methods=["GET", "POST"])
 def tbr():
     if request.method == "POST":
         if "change" in request.form:
@@ -1258,78 +1307,29 @@ def tbr():
             temp = re.findall(r'\d+', book_id)
             book_id = list(map(int, temp))[0]
             if change == "tick":
-                switch("tbr","completed", book_id)
-            elif change == 'cross':
-                switch("tbr","unfinished", book_id)
+                switch("tbr", "completed", book_id)
+            elif change == "cross":
+                switch("tbr", "unfinished", book_id)
             return redirect("/tbr")
-        elif "status_filter" in request.form:
-            if "clear" in request.form:
-                return redirect("/tbr")
-            status_filter = request.form.get("status_filter")
-            if status_filter in ["Finished", "Left Extras", "Uncompleted"]:
-                books = db.execute(
-                    "SELECT * FROM tbr WHERE user_id = ? AND status = ? ORDER BY date DESC, id DESC",
-                    session["user_id"],
-                    status_filter,
-                )
-            else:
-                books = []
-            return render_template(
-                "tbr.html",
-                books=books,
-                random=session.get("selected", []),
-                selected_status=status_filter,
-            )
-        elif "filter" in request.form:
-            if "clear" in request.form:
-                return redirect("/tbr")
-            else:   
-                filter = request.form.get("filter")
-                id = session["user_id"]
-                if filter in ["genres", "series", "notes"]:
-                    books = db.execute(f"SELECT * FROM tbr WHERE {filter} != '' AND user_id = {id}  ORDER BY {filter}")
-                else:
-                    books = []
-                return render_template("tbr.html",books=books,random=session.get("selected", []),selected_status=request.form.get("status_filter"))
-                
+        if "clear" in request.form:
+            return redirect("/tbr")
+    return render_category_page("tbr", "tbr.html")
 
-    else:
-        referrer = request.headers.get("Referer")
-        if "tbr" not in referrer:
-            session["selected"] =[]
-        books = db.execute("SELECT * FROM tbr WHERE user_id = ? ORDER BY date DESC, id DESC", session["user_id"])
-        return render_template("tbr.html",books=books,random=session.get("selected", []),selected_status="")
-    
 
-@app.route("/completed", methods = ["GET", "POST"])
+@app.route("/completed", methods=["GET", "POST"])
 def completed():
-    if request.method=="POST":
+    if request.method == "POST":
         if "book" in request.form:
             id = request.form.get("book")
-            times = db.execute("SELECT * FROM completed WHERE id =? AND user_id = ?", id, session["user_id"])[0]["reread"]
-            db.execute("UPDATE completed SET reread =? WHERE id =? AND user_id = ?", times+1, id, session["user_id"])
+            times = db.execute("SELECT * FROM completed WHERE id = ? AND user_id = ?", id, session["user_id"])[0]["reread"]
+            db.execute("UPDATE completed SET reread = ? WHERE id = ? AND user_id = ?", times + 1, id, session["user_id"])
             return redirect("/completed")
-        elif "filter" in request.form:
-            if "clear" in request.form:
-                return redirect("/completed")
-            else:   
-                filter = request.form.get("filter")
-                id = session["user_id"]
-                if filter in ["genres", "series", "notes"]:
-                    books = db.execute(f"SELECT * FROM completed WHERE {filter} != '' AND user_id = {id}  ORDER BY {filter}")
-                else:
-                    books = []
-                return render_template("completed.html",books=books,random=session["selected"])
-    else:
-        referrer = request.headers.get("Referer")
-        if "completed" not in referrer:
-            session["selected"] =[]  
-        books = db.execute("SELECT * FROM completed WHERE user_id = ? ORDER BY date DESC, id DESC", session["user_id"]) 
-        return render_template("completed.html",books=books,random=session["selected"])
-    
+        if "clear" in request.form:
+            return redirect("/completed")
+    return render_category_page("completed", "completed.html")
 
 
-@app.route("/unfinished", methods = ["GET", "POST"])
+@app.route("/unfinished", methods=["GET", "POST"])
 def unfinished():
     if request.method == "POST":
         if "change" in request.form:
@@ -1338,50 +1338,35 @@ def unfinished():
             temp = re.findall(r'\d+', book_id)
             id = list(map(int, temp))[0]
             if change == "tick":
-                switch("unfinished","completed", id)
-            elif change == 'cross':
-                switch("unfinished","tbr", id)
+                switch("unfinished", "completed", id)
+            elif change == "cross":
+                switch("unfinished", "tbr", id)
             return redirect("/unfinished")
-        elif "filter" in request.form:
-            if "clear" in request.form:
-                return redirect("/unfinished")
-            else:   
-                filter = request.form.get("filter")
-                id = session["user_id"]
-                if filter in ["genres", "series", "notes"]:
-                    books = db.execute(f"SELECT * FROM unfinished WHERE {filter} != '' AND user_id = {id}  ORDER BY {filter}")
-                else:
-                    books = []
-                return render_template("unfinished.html",books=books,random=session["selected"])
-        else:
-            flash("No valid input detected.")
-    else:
-        referrer = request.headers.get("Referer")
-        if "unfinished" not in referrer:
-            session["selected"] =[]
-        books = db.execute("SELECT * FROM unfinished WHERE user_id = ? ORDER BY date DESC, id DESC", session["user_id"])
-        return render_template("unfinished.html",books=books,random=session["selected"])
+        if "clear" in request.form:
+            return redirect("/unfinished")
+    return render_category_page("unfinished", "unfinished.html")
     
-@app.route("/search", methods = ["GET", "POST"])
+@app.route("/search", methods=["GET", "POST"])
 def search():
     if request.method == "POST":
         book = request.form.get("search", "").lower()
-        exists = db.execute("SELECT * FROM combined WHERE user_id = ? AND book LIKE ?", session["user_id"], '%'+book+'%')
+        exists = db.execute("SELECT * FROM combined WHERE user_id = ? AND book LIKE ?", session["user_id"], '%' + book + '%')
         if not exists:
             flash("No books with similar names found! Try a different keyword? 🤔")
-        else:
-            results = []
-            statuses = []
-            for i in exists:
-                status = i["page"]
-                statuses.append(status)
-            statuses = list(set(statuses))
-            for s in statuses:
-                result = db.execute(f"SELECT * FROM {s} WHERE user_id = ? AND book LIKE ?", session["user_id"], '%'+book+'%')
-                for r in result:
-                    r["status"] = s
-                    results.append(r)
-            return render_template("search.html", results=results, search=book)
+            return redirect("/home")
+
+        results = []
+        categories = {row["page"] for row in exists}
+        for category in categories:
+            rows = db.execute(
+                f"SELECT * FROM {category} WHERE user_id = ? AND book LIKE ?",
+                session["user_id"],
+                '%' + book + '%',
+            )
+            for r in rows:
+                r["category"] = category
+                results.append(r)
+        return render_template("search.html", results=results, search=book)
     return redirect("/home")
 
 

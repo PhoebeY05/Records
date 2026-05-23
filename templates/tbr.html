@@ -6,21 +6,17 @@
 {% extends "books.html" %}
 
 {% block checked %}
-<form action="/tbr" method="post">
+<form action="/tbr" method="post" class="m-0">
     <input hidden name="change" value="tick"/>
-    <input hidden name="book" value={{book.id}}/>
-    <button type = "submit" class="white border-0 check" height="20" width="20">
-        ✅  
-    </button>
+    <input hidden name="book" value="{{book.id}}"/>
+    <button type="submit" class="book-action-btn" aria-label="Mark completed">✅</button>
 </form>
 {% endblock %}
 
 {% block crossed %}
-<form action="/tbr" method="post">
+<form action="/tbr" method="post" class="m-0">
     <input hidden name="change" value="cross"/>
-    <input hidden name="book" value={{book.id}}/>
-    <button type = "submit" class="white border-0 check" height="20" width="20">
-        ❎
-    </button>
+    <input hidden name="book" value="{{book.id}}"/>
+    <button type="submit" class="book-action-btn" aria-label="Mark unfinished">❎</button>
 </form>
 {% endblock %}
