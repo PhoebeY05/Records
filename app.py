@@ -5,6 +5,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from datetime import date, datetime
 import random
 import re
+import os
 
 
 app = Flask(__name__)
@@ -17,7 +18,9 @@ app.config["SESSION_TYPE"] = "filesystem"
 Session(app)
 
 # Configure CS50 Library to use SQLite database
-db = SQL("sqlite:///books.db")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.path.join(BASE_DIR, "books.db")
+db = SQL(f"sqlite:///{DB_PATH}")
 today = date.today()
 
 
