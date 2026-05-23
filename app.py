@@ -8,6 +8,7 @@ import re
 
 
 app = Flask(__name__)
+BOOK_PAGES = {"completed", "unfinished", "tbr"}
 
 
 # Configure session to use filesystem (instead of signed cookies)
@@ -19,13 +20,30 @@ Session(app)
 db = SQL("sqlite:///books.db")
 today = date.today()
 
+
+def get_page_from_referrer():
+    referrer = request.headers.get("Referer", "")
+    for page in BOOK_PAGES:
+        if page in referrer:
+            return page
+    return None
+
 def switch(original, new, book_id):
     original = original.lower()
     new = new.lower()
     latest = db.execute("SELECT * FROM completed WHERE user_id = ? ORDER BY date DESC LIMIT 1", session["user_id"])
-    book = db.execute("SELECT * FROM ? WHERE id = ? AND user_id = ?", original, book_id, session["user_id"])
-    db.execute("DELETE FROM ? WHERE id = ? AND user_id = ?", original, book_id, session["user_id"])
-    new_id = db.execute("INSERT INTO ? (user_id, book, date, notes, genres, status, series) VALUES (?, ?, ?,?,?,?,?)", new, session["user_id"], book[0]["book"], today, book[0]["notes"], book[0]["genres"], book[0]["status"], book[0]["series"])
+    book = db.execute(f"SELECT * FROM {original} WHERE id = ? AND user_id = ?", book_id, session["user_id"])
+    db.execute(f"DELETE FROM {original} WHERE id = ? AND user_id = ?", book_id, session["user_id"])
+    new_id = db.execute(
+        f"INSERT INTO {new} (user_id, book, date, notes, genres, status, series) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        session["user_id"],
+        book[0]["book"],
+        today,
+        book[0]["notes"],
+        book[0]["genres"],
+        book[0]["status"],
+        book[0]["series"],
+    )
     db.execute("UPDATE combined SET id = ?, page = ? WHERE id = ?", new_id, new, book_id)
     if new == "completed":
         if len(latest) > 0:
@@ -82,10 +100,19 @@ def add():
         genres = request.form.get("genres")
         notes = request.form.get("notes")
         series = request.form.get("series")
-        latest = db.execute("SELECT * FROM completed ORDER BY date DESC LIMIT 1")
+        latest = db.execute("SELECT * FROM completed WHERE user_id = ? ORDER BY date DESC LIMIT 1", session["user_id"])
         if name != "" and page != "Select page" and status != "":    
-            book_id = db.execute("INSERT INTO ? (user_id, book, date, notes, genres, status, series) VALUES (?,?,?,?,?,?,?)", page, session["user_id"], name, today, notes, genres, status, series)
-            flash('Add Book Succesful!')
+            book_id = db.execute(
+                f"INSERT INTO {page} (user_id, book, date, notes, genres, status, series) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                session["user_id"],
+                name,
+                today,
+                notes,
+                genres,
+                status,
+                series,
+            )
+            flash('Add Book Success!')
             db.execute("INSERT INTO combined (id, user_id, book, date, page) VALUES (?,?,?,?,?)", book_id, session["user_id"], name, today, page)
             if page == "completed":
                 if latest == []:
@@ -105,14 +132,10 @@ def add():
 
 @app.route("/choose", methods = ["GET", "POST"])
 def choose():
-    referrer = request.headers.get("Referer")
-    if "completed" in referrer:
-        page="completed"
-    elif "tbr" in referrer:
-        page="tbr"
-    elif "unfinished" in referrer:
-        page="unfinished"
-    all = db.execute("SELECT * FROM ?", page)
+    page = get_page_from_referrer()
+    if page is None:
+        return redirect("/home")
+    all = db.execute(f"SELECT * FROM {page}")
     random.shuffle(all)
     if all == []:
         session["selected"] = {"book": "No Books Found", "status":"", "genres": "", "notes":"","series":""}
@@ -122,17 +145,11 @@ def choose():
 
 @app.route("/delete", methods = ["GET", "POST"])
 def delete():
-    referrer = request.headers.get("Referer")
+    page = get_page_from_referrer()
     id = request.form.get("book")
-    if "completed" in referrer:
-        page= "completed"
-    elif "tbr" in referrer:
-        page= "tbr"
-    elif "unfinished" in referrer:
-        page= "unfinished"
-    else:
+    if page is None:
         return redirect("/")
-    db.execute("DELETE FROM ? WHERE id = ? AND user_id = ?", page, id, session["user_id"])
+    db.execute(f"DELETE FROM {page} WHERE id = ? AND user_id = ?", id, session["user_id"])
     db.execute("DELETE FROM combined WHERE page = ? AND id = ? AND user_id = ?", page, id, session["user_id"])
     return redirect(f"/{page}")
 
@@ -234,7 +251,7 @@ def unfinished():
 @app.route("/search", methods = ["GET", "POST"])
 def search():
     if request.method == "POST":
-        book = request.form.get("search").lower()
+        book = request.form.get("search", "").lower()
         exists = db.execute("SELECT * FROM combined WHERE user_id = ? AND book LIKE ?", session["user_id"], '%'+book+'%')
         if not exists:
             flash("No books with similar names found! Try a different keyword? 🤔")
@@ -246,7 +263,7 @@ def search():
                 statuses.append(status)
             statuses = list(set(statuses))
             for s in statuses:
-                result = db.execute("SELECT * FROM ? WHERE user_id = ? AND book LIKE ?", s, session["user_id"], '%'+book+'%')
+                result = db.execute(f"SELECT * FROM {s} WHERE user_id = ? AND book LIKE ?", session["user_id"], '%'+book+'%')
                 for r in result:
                     r["status"] = s
                     results.append(r)

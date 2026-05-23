@@ -5,10 +5,12 @@
 
 ## Technologies Used:
 1. Flask
-2. Jinja
-3. HTML, CSS, JavaScript
-4. Bootstrap
-5. SQLite3
+2. Flask-Session
+3. cs50 SQL library
+4. Jinja
+5. HTML, CSS, JavaScript
+6. Bootstrap 5
+7. SQLite3
 ## Features:
 1. Login functionality allows user's book list and tastes to remain privacy 
 2. Status with standard options like Finishing, Finishing Soon, Left Extras, Uncompleted & customisable option to type anything user prefers
@@ -39,12 +41,16 @@
 ## localhost
 1. Clone repository/Download zip file <img width="1331" alt="image" src="https://github.com/PhoebeY05/Reading-Records/assets/115935747/a178ac76-cd85-4656-8136-4f8789c741f4">
 2. Open folder in VS Code
-3. Run the below commands in VS Code's terminal
+3. Install the dependencies inside the project virtual environment
 
 ```bash
-export FLASK_APP=app.py
-export FLASK_DEBUG=1
-flask run
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+4. Run the app in VS Code's terminal
+
+```bash
+flask --app app run --debug
 ```
 ## Online
 1. Go to https://phoebe05.pythonanywhere.com/

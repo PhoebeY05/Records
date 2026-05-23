@@ -26,19 +26,19 @@
                     <div class="input-group-prepend">
                         <span class="input-group-text grey" id="basic-addon3">Marked as "Completed" in</span>
                     </div>
-                    <input value="{{ request.form['completed'] }}" type="number" min="1900" max="2099" step="1" placeholder="Year" class="form-control" id="basic-url" aria-describedby="basic-addon3" name="completed">
+                    <input value="{{ request.form.get('completed', '') }}" type="number" min="1900" max="2099" step="1" placeholder="Year" class="form-control" id="basic-url" aria-describedby="basic-addon3" name="completed">
                 </div>
                 <div class="input-group mb-3">
                     <div class="input-group-prepend">
                         <span class="input-group-text grey" id="basic-addon3">Marked as "Unfinished" in</span>
                     </div>
-                    <input value="{{ request.form['unfinished'] }}" type="number" min="1900" max="2099" step="1" placeholder="Year" class="form-control" id="basic-url" aria-describedby="basic-addon3" name="unfinished">
+                    <input value="{{ request.form.get('unfinished', '') }}" type="number" min="1900" max="2099" step="1" placeholder="Year" class="form-control" id="basic-url" aria-describedby="basic-addon3" name="unfinished">
                 </div>
                 <div class="input-group mb-3">
                     <div class="input-group-prepend">
                         <span class="input-group-text grey" id="basic-addon3">Marked as "To Be Read" in</span>
                     </div>
-                    <input value="{{ request.form['tbr'] }}" type="number" min="1900" max="2099" step="1" placeholder="Year" class="form-control" id="basic-url" aria-describedby="basic-addon3" name="tbr">
+                    <input value="{{ request.form.get('tbr', '') }}" type="number" min="1900" max="2099" step="1" placeholder="Year" class="form-control" id="basic-url" aria-describedby="basic-addon3" name="tbr">
                 </div>
                 <input class="btn btn-secondary grey right" type="submit" id="timeline" name="timeline" Placeholder="submit">
             </form>
