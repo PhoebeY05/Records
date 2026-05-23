@@ -5,9 +5,7 @@
 {% endblock %}
 
 {% block main %}
-
-<div class="container">
-
+<div class="container home-dashboard py-4">
     {% for msg in get_flashed_messages()  %}
     <div class="alert alert-warning alert-dismissible fade show" role="alert">
         {{msg}}
@@ -16,122 +14,74 @@
     </div>
     {% endfor %}
 
-</div>
-<div class="container">
-    <div class="row">
-        <div class="col">
-            <h1 class="title">Timeline</h1> 
-            <form action="/home" method="post">
-                <div class="input-group mb-3">
-                    <div class="input-group-prepend">
-                        <span class="input-group-text grey" id="basic-addon3">Marked as "Completed" in</span>
-                    </div>
-                    <input value="{{ request.form.get('completed', current_year|string) }}" type="number" min="1900" max="2099" step="1" placeholder="Year" class="form-control" id="basic-url" aria-describedby="basic-addon3" name="completed">
-                </div>
-                <div class="input-group mb-3">
-                    <div class="input-group-prepend">
-                        <span class="input-group-text grey" id="basic-addon3">Marked as "Unfinished" in</span>
-                    </div>
-                    <input value="{{ request.form.get('unfinished', current_year|string) }}" type="number" min="1900" max="2099" step="1" placeholder="Year" class="form-control" id="basic-url" aria-describedby="basic-addon3" name="unfinished">
-                </div>
-                <div class="input-group mb-3">
-                    <div class="input-group-prepend">
-                        <span class="input-group-text grey" id="basic-addon3">Marked as "To Be Read" in</span>
-                    </div>
-                    <input value="{{ request.form.get('tbr', current_year|string) }}" type="number" min="1900" max="2099" step="1" placeholder="Year" class="form-control" id="basic-url" aria-describedby="basic-addon3" name="tbr">
-                </div>
-                <input class="btn btn-secondary grey right" type="submit" id="timeline" name="timeline" Placeholder="submit">
-            </form>
-            <hr>
-            <div class="container text-center">
-                <div class="row align-items-start">
-                    <div class="col">
-                        <p>
-                            <button class="btn shadow-lg p-3 mb-5 hidden-info" type="button" data-bs-toggle="collapse" data-bs-target="#completed" aria-expanded="false" aria-controls="collapseExample">
-                            Completed
-                            </button>
-                        </p>
-                        <div class="collapse" id="completed">
-                            {% if completed is defined and completed|length > 0 %}
-                                <div class="card card-body">
-                                    <section class="py-5">
-                                        <ul class="timeline">
-                                            {% for book in completed %}
-                                                <li class="timeline-item mb-5">
-                                                    <h5 class="fw-bold">{{book.book}}</h5>
-                                                    <p class="text-muted mb-2 fw-bold">{{book.date}}</p>
-                                                    <p class="text-muted">{{book.notes}}</p>
-                                                </li>
-                                            {% endfor %}
-                                        </ul>
-                                    </section>     
-                                </div>
-                            {% else %}
-                                <h4 class="grey-text">No books marked Completed during this year</h4>
-                            {% endif %}
-                        </div>
-                    </div>
-                    <div class="col">
-                        <p>
-                            <button class= "btn shadow-lg p-3 mb-5 hidden-info" type="button" data-bs-toggle="collapse" data-bs-target="#unfinished" aria-expanded="false" aria-controls="collapseExample">
-                            Unfinished
-                            </button>
-                        </p>
-                        <div class="collapse" id="unfinished">
-                            {% if unfinished is defined and unfinished|length > 0 %}
-                                <div class="card card-body">
-                                    <section class="py-5">
-                                        <ul class="timeline">
-                                            {% for book in unfinished %}
-                                                <li class="timeline-item mb-5">
-                                                    <h5 class="fw-bold">{{book.book}}</h5>
-                                                    <p class="text-muted mb-2 fw-bold">{{book.date}}</p>
-                                                </li>
-                                            {% endfor %}
-                                        </ul>
-                                    </section>     
-                                </div>
-                            {% else %}
-                                <h4 class="grey-text">No books marked Unfinished during this year</h4>
-                            {% endif %}
-                        </div>
-                    </div>
-                    <div class="col">
-                        <p>
-                            <button class="btn shadow-lg p-3 mb-5 hidden-info" type="button" data-bs-toggle="collapse" data-bs-target="#tbr" aria-expanded="false" aria-controls="collapseExample">
-                            To Be Read
-                            </button>
-                        </p>
-                        <div class="collapse" id="tbr">
-                            {% if tbr is defined and tbr|length > 0 %}
-                                <div class="card card-body">
-                                    <section class="py-5">
-                                        <ul class="timeline">
-                                            {% for book in tbr %}
-                                                <li class="timeline-item mb-5">
-                                                    <h5 class="fw-bold">{{book.book}}</h5>
-                                                    <p class="text-muted mb-2 fw-bold">{{book.date}}</p>
-                                                    <p class="text-muted">{{book.notes}}</p>
-                                                    <p class="text-muted">{{book.reread}}</p>
-                                                </li>
-                                            {% endfor %}
-                                        </ul>
-                                    </section>     
-                                </div>
-                            {% else %}
-                                <h4 class="grey-text">No books marked To Be Read during this year</h4>
-                            {% endif %}
-                        </div>
-                    </div>
+    {% if completed is defined %}{% set completed_count = completed|length %}{% else %}{% set completed_count = 0 %}{% endif %}
+    {% if unfinished is defined %}{% set unfinished_count = unfinished|length %}{% else %}{% set unfinished_count = 0 %}{% endif %}
+    {% if tbr is defined %}{% set tbr_count = tbr|length %}{% else %}{% set tbr_count = 0 %}{% endif %}
+    {% if day is defined and day|length > 0 %}{% set recents = day %}{% set recents_label = "Today" %}
+    {% elif week is defined and week|length > 0 %}{% set recents = week %}{% set recents_label = "This Week" %}
+    {% elif month is defined and month|length > 0 %}{% set recents = month %}{% set recents_label = "This Month" %}
+    {% else %}{% set recents = [] %}{% set recents_label = "No selection" %}{% endif %}
+
+    <section class="home-hero card shadow-sm mb-4">
+        <div class="card-body home-hero-body">
+            <div>
+                <p class="home-kicker mb-1">Reading dashboard</p>
+                <h1 class="home-hero-title mb-2">Home</h1>
+                <p class="home-subtitle mb-0">Scan recent adds, jump to a year, or switch categories without hunting through the page.</p>
+            </div>
+            <div class="home-actions d-flex flex-wrap gap-2">
+                <a class="btn btn-light home-action-btn home-action-primary" href="/add">Add Book</a>
+                <a class="btn btn-outline-light home-action-btn" href="/import">Import .txt</a>
+                <a class="btn btn-outline-light home-action-btn" href="#timeline-section">Jump to timeline</a>
+            </div>
+        </div>
+    </section>
+
+    <section class="row g-3 mb-4">
+        <div class="col-12 col-md-3">
+            <div class="summary-card card shadow-sm h-100">
+                <div class="card-body">
+                    <p class="summary-label mb-1">Completed</p>
+                    <h2 class="summary-value mb-0">{{ completed_count }}</h2>
                 </div>
             </div>
         </div>
-        <div class="col">
-            <h1 class="title">Recents</h1>
-            <form action="/home" method ="post">
-                <div class="center">
-                    <select class="custom-select" id="inputGroupSelect04" name="duration">
-                    <option>Choose books added... </option>
+        <div class="col-12 col-md-3">
+            <div class="summary-card card shadow-sm h-100">
+                <div class="card-body">
+                    <p class="summary-label mb-1">Unfinished</p>
+                    <h2 class="summary-value mb-0">{{ unfinished_count }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-md-3">
+            <div class="summary-card card shadow-sm h-100">
+                <div class="card-body">
+                    <p class="summary-label mb-1">To Be Read</p>
+                    <h2 class="summary-value mb-0">{{ tbr_count }}</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-md-3">
+            <div class="summary-card card shadow-sm h-100">
+                <div class="card-body">
+                    <p class="summary-label mb-1">Recents</p>
+                    <h2 class="summary-value mb-0">{{ recents|length }}</h2>
+                    <small class="text-muted">{{ recents_label }}</small>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="card shadow-sm mb-4" id="recents-section">
+        <div class="card-header home-section-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+            <div>
+                <h2 class="h4 mb-1">Recents</h2>
+                <p class="text-muted mb-0">Choose a recent range and review what was added most recently.</p>
+            </div>
+            <form action="/home" method="post" class="home-recents-form d-flex flex-wrap gap-2 align-items-center">
+                <select class="form-select home-select" id="inputGroupSelect04" name="duration">
+                    <option value="">Choose books added...</option>
                     {% if option == "day" %}
                         <option value="day" selected>Today</option>
                     {% else %}
@@ -147,39 +97,157 @@
                     {% else %}
                         <option value="month">This Month</option>
                     {% endif %}
-                    
-                    </select>
-                    <div class="input-group-append">
-                        <button class="btn btn-outline-secondary grey" type="submit" id="recents">Check</button>
+                </select>
+                <button class="btn btn-outline-secondary grey" type="submit" id="recents">Check</button>
+            </form>
+        </div>
+        <div class="card-body panel-scroll-panel">
+            {% if recents|length > 0 %}
+                <div class="book-grid book-grid-recents">
+                    {% for book in recents %}
+                        <article class="book-card card h-100">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                                    <h3 class="book-title h5 mb-0">{{ book.book }}</h3>
+                                    <span class="badge bg-dark-subtle text-dark">{{ book.page | upper }}</span>
+                                </div>
+                                <p class="text-muted mb-2 fw-bold">{{ book.date }}</p>
+                                <p class="book-meta mb-0">
+                                    {% if book.notes %}{{ book.notes }}{% endif %}
+                                    {% if book.type %}{{ book.type }}{% endif %}
+                                    {% if book.reread %}{{ book.reread }}{% endif %}
+                                </p>
+                            </div>
+                        </article>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <p class="grey-text mb-0">No recent books selected yet.</p>
+            {% endif %}
+        </div>
+    </section>
+
+    <section class="card shadow-sm" id="timeline-section">
+        <div class="card-header home-section-header">
+            <div>
+                <h2 class="h4 mb-1">Timeline</h2>
+                <p class="text-muted mb-0">Pick a year and open the category you want to inspect.</p>
+            </div>
+            <form action="/home" method="post" class="timeline-form-inline mt-3">
+                <div class="timeline-year-grid">
+                    <div class="timeline-year-group">
+                        <label class="form-label mb-1 small text-muted" for="timeline-completed">Completed</label>
+                        <input value="{{ request.form.get('completed', current_year|string) }}" type="number" min="1900" max="2099" step="1" class="form-control" id="timeline-completed" name="completed">
+                    </div>
+                    <div class="timeline-year-group">
+                        <label class="form-label mb-1 small text-muted" for="timeline-unfinished">Unfinished</label>
+                        <input value="{{ request.form.get('unfinished', current_year|string) }}" type="number" min="1900" max="2099" step="1" class="form-control" id="timeline-unfinished" name="unfinished">
+                    </div>
+                    <div class="timeline-year-group">
+                        <label class="form-label mb-1 small text-muted" for="timeline-tbr">To Be Read</label>
+                        <input value="{{ request.form.get('tbr', current_year|string) }}" type="number" min="1900" max="2099" step="1" class="form-control" id="timeline-tbr" name="tbr">
+                    </div>
+                    <div class="timeline-submit-group">
+                        <button class="btn btn-secondary grey w-100" type="submit" id="timeline" name="timeline">Show timeline</button>
                     </div>
                 </div>
             </form>
-            <br>
-            <!-- Timeline HTML found on https://mdbootstrap.com/docs/standard/extended/timeline/ -->
-            <section class="py-5 center">
-                <ul class="timeline">
-                    {% if day is defined and day|length > 0 %}{% set recents = day %}
-                    {% elif week is defined and week|length > 0 %}{% set recents = week %}
-                    {% elif month is defined and month|length > 0 %}{% set recents = month %}
-                    {% endif %}
-                    {% for book in recents%}
-                        <li class="timeline-item mb-5">
-                            <h5 class="fw-bold">{{book.book}}</h5>
-                            <p class="text-muted mb-2 fw-bold">{{book.page | upper}}</p>
-                            <p class="text-muted mb-2 fw-bold">{{book.date}}</p>
-                            <p class="text-muted">
-                                {% if book.notes %}{{ book.notes }}
-                                {% endif %}
-                                {% if book.type %}{{ book.type }} 
-                                {% endif %}
-                                {% if book.reread %}{{ book.reread }} 
-                                {% endif %}
-                            </p>
-                        </li>
-                    {% endfor %}
-                </ul>
-            </section>  
         </div>
-    </div>
+        <div class="card-body">
+            <div class="accordion home-accordion" id="timelineAccordion">
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="completedHeading">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#completed" aria-expanded="false" aria-controls="completed">
+                            <span class="me-2">Completed</span>
+                            <span class="badge bg-dark-subtle text-dark">{{ completed_count }}</span>
+                        </button>
+                    </h2>
+                    <div id="completed" class="accordion-collapse collapse" aria-labelledby="completedHeading" data-bs-parent="#timelineAccordion">
+                        <div class="accordion-body panel-scroll-panel">
+                            {% if completed is defined and completed|length > 0 %}
+                                <ul class="timeline timeline-modern mb-0">
+                                    {% for book in completed %}
+                                        <li class="timeline-item timeline-modern-item">
+                                            <div class="timeline-card card book-card">
+                                                <div class="card-body">
+                                                <h3 class="book-title h5 mb-1">{{ book.book }}</h3>
+                                                <p class="text-muted mb-2 fw-bold">{{ book.date }}</p>
+                                                <p class="book-meta mb-0">{{ book.notes }}</p>
+                                                </div>
+                                            </div>
+                                        </li>
+                                    {% endfor %}
+                                </ul>
+                            {% else %}
+                                <p class="grey-text mb-0">No books marked Completed during this year.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="unfinishedHeading">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#unfinished" aria-expanded="false" aria-controls="unfinished">
+                            <span class="me-2">Unfinished</span>
+                            <span class="badge bg-dark-subtle text-dark">{{ unfinished_count }}</span>
+                        </button>
+                    </h2>
+                    <div id="unfinished" class="accordion-collapse collapse" aria-labelledby="unfinishedHeading" data-bs-parent="#timelineAccordion">
+                        <div class="accordion-body panel-scroll-panel">
+                            {% if unfinished is defined and unfinished|length > 0 %}
+                                <ul class="timeline timeline-modern mb-0">
+                                    {% for book in unfinished %}
+                                        <li class="timeline-item timeline-modern-item">
+                                            <div class="timeline-card card book-card">
+                                                <div class="card-body">
+                                                <h3 class="book-title h5 mb-1">{{ book.book }}</h3>
+                                                <p class="text-muted mb-0 fw-bold">{{ book.date }}</p>
+                                                </div>
+                                            </div>
+                                        </li>
+                                    {% endfor %}
+                                </ul>
+                            {% else %}
+                                <p class="grey-text mb-0">No books marked Unfinished during this year.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="tbrHeading">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#tbr" aria-expanded="false" aria-controls="tbr">
+                            <span class="me-2">To Be Read</span>
+                            <span class="badge bg-dark-subtle text-dark">{{ tbr_count }}</span>
+                        </button>
+                    </h2>
+                    <div id="tbr" class="accordion-collapse collapse" aria-labelledby="tbrHeading" data-bs-parent="#timelineAccordion">
+                        <div class="accordion-body panel-scroll-panel">
+                            {% if tbr is defined and tbr|length > 0 %}
+                                <ul class="timeline timeline-modern mb-0">
+                                    {% for book in tbr %}
+                                        <li class="timeline-item timeline-modern-item">
+                                            <div class="timeline-card card book-card">
+                                                <div class="card-body">
+                                                <h3 class="book-title h5 mb-1">{{ book.book }}</h3>
+                                                <p class="text-muted mb-2 fw-bold">{{ book.date }}</p>
+                                                <p class="book-meta mb-0">
+                                                    {% if book.notes %}{{ book.notes }}{% endif %}
+                                                    {% if book.reread %}{{ book.reread }}{% endif %}
+                                                </p>
+                                                </div>
+                                            </div>
+                                        </li>
+                                    {% endfor %}
+                                </ul>
+                            {% else %}
+                                <p class="grey-text mb-0">No books marked To Be Read during this year.</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
 </div>
 {% endblock %}
