@@ -740,6 +740,7 @@ def switch(original, new, book_id):
 
 @app.route("/home", methods = ["GET", "POST"])
 def home():
+    current_year = date.today().year
     if request.method == "POST":
         if "timeline" in request.form:
             completed_y = request.form.get("completed")
@@ -752,26 +753,26 @@ def home():
                 flash("Submission failed! Some fields were not filled in.")
                 return redirect("/home")
             else:
-                return render_template("home.html", completed=completed, unfinished=unfinished, tbr=tbr)
+                return render_template("home.html", completed=completed, unfinished=unfinished, tbr=tbr, current_year=current_year)
                 
         else:
             duration = request.form.get("duration")
             
             if duration == "day":
                 day = db.execute("SELECT * FROM combined WHERE date = ? AND user_id = ?", today, session["user_id"])
-                return render_template("home.html", day=day, option="day")
+                return render_template("home.html", day=day, option="day", current_year=current_year)
             elif duration == "week":
                 week = db.execute("SELECT * FROM combined WHERE strftime('%W', date)  = ? AND user_id = ?", today.strftime("%W"), session["user_id"])
-                return render_template("home.html",week=week,option="week")
+                return render_template("home.html",week=week,option="week", current_year=current_year)
             elif duration == "month":
                 month = db.execute("SELECT * FROM combined WHERE strftime('%m', date) = ? AND user_id = ?", '%02d' % today.month, session["user_id"])
-                return render_template("home.html", month=month,option="month")
+                return render_template("home.html", month=month,option="month", current_year=current_year)
             else:
                 flash("Submission failed! No valid options were selected.")
                 return redirect("/home")
        
     else:
-        return render_template("home.html")
+        return render_template("home.html", current_year=current_year)
 
 @app.route("/add", methods = ["GET", "POST"])
 def add():
