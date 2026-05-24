@@ -700,26 +700,27 @@ def parse_tbr_status_marker(line):
     return None
 
 
-UNFINISHED_CHAPTER_PATTERNS = [
-    re.compile(r"\bchapter\b\s*[^\s<>()\[\]{}]+", flags=re.IGNORECASE),
-    re.compile(r"\bvolume\b\s*[^\s<>()\[\]{}]+", flags=re.IGNORECASE),
-    re.compile(r"(?:\d+|[一二三四五六七八九十百千零〇两]+)章", flags=re.IGNORECASE),
-    re.compile(r"(?:\d+|[一二三四五六七八九十百千零〇两]+)页", flags=re.IGNORECASE),
+UNFINISHED_STRONG_MARKER_PATTERNS = [
+    re.compile(r"第\s*(?:\d+|[一二三四五六七八九十百千零〇两]+)(?:\s+(?:\d+|[一二三四五六七八九十百千零〇两]+))*\s*[章页]", flags=re.IGNORECASE),
+    re.compile(r"(?:\d+|[一二三四五六七八九十百千零〇两]+)(?:\s+(?:\d+|[一二三四五六七八九十百千零〇两]+))*\s*[章页]", flags=re.IGNORECASE),
+    re.compile(r"(?<!\w)chapter", flags=re.IGNORECASE),
+    re.compile(r"(?<!\w)volume", flags=re.IGNORECASE),
+    re.compile(r"(?<!\w)pg", flags=re.IGNORECASE),
+    re.compile(r"(?<!\w)page", flags=re.IGNORECASE),
 ]
 
 
-def extract_unfinished_chapter(text):
-    matches = [match for pattern in UNFINISHED_CHAPTER_PATTERNS if (match := pattern.search(text))]
+def extract_unfinished_marker(text):
+    matches = [match for pattern in UNFINISHED_STRONG_MARKER_PATTERNS if (match := pattern.search(text))]
     if not matches:
+        for token_match in re.finditer(r"\S+", text):
+            token = token_match.group(0)
+            if token.endswith("章") or token.endswith("页"):
+                return token_match.start(), text[token_match.start():]
         return None, text
 
-    match = max(matches, key=lambda item: item.start())
-    unread_chapter = match.group(0).strip().rstrip(".,;:!?")
-
-    prefix = re.sub(r"[\s<\(\[\{（【｛]+$", "", text[:match.start()])
-    suffix = re.sub(r"^[\s>\)\]\}）】｝]+", "", text[match.end():])
-    cleaned_text = re.sub(r"\s+", " ", f"{prefix} {suffix}").strip()
-    return unread_chapter, cleaned_text
+    match = min(matches, key=lambda item: item.start())
+    return match.start(), text[match.start():]
 
 
 def parse_unfinished_line(line):
@@ -728,25 +729,25 @@ def parse_unfinished_line(line):
     if not has_book_name_prefix(cleaned_line):
         return None
 
-    unread_chapter, title_source = extract_unfinished_chapter(cleaned_line)
+    marker_start, notes_source = extract_unfinished_marker(cleaned_line)
     status = "Unfinished"
-    if unread_chapter:
-        extra = f"Haven't read {unread_chapter}"
-        source_text = title_source
+    if marker_start is not None:
+        title_source = cleaned_line[:marker_start].strip()
+        extra = notes_source.strip()
     else:
+        title_source = cleaned_line
         extra = ""
-        source_text = cleaned_line
 
     title, title_notes = parse_title(title_source)
     if not title:
         return None
 
-    common_notes, series = parse_common_metadata(source_text)
+    common_notes, series = parse_common_metadata(cleaned_line)
     notes = []
-    notes.extend(title_notes)
-    notes.extend(common_notes)
     if extra:
         notes.append(extra)
+    notes.extend(title_notes)
+    notes.extend(common_notes)
 
     return {
         "book": title,
