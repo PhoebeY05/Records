@@ -3,6 +3,9 @@
 - Book list for unpublished books 
    - e.g. Wattpad, 晋江文学城
 
+
+![Homepage](images/homepage.png)
+
 ## Technologies Used:
 1. Flask
 2. Flask-Session
@@ -11,6 +14,9 @@
 5. HTML, CSS, JavaScript
 6. Bootstrap 5
 7. SQLite3
+
+![Repository Diagram](images/Repository_Diagram.png)
+
 ## Features:
 1. Login functionality allows user's book list and tastes to remain privacy 
 2. Status with standard options like Finishing, Finishing Soon, Left Extras, Uncompleted & customisable option to type anything user prefers
