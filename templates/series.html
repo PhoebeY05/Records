@@ -1,0 +1,44 @@
+{% extends "layout.html" %}
+
+{% block title %}Series{% endblock %}
+
+{% block main %}
+<div class="container book-list-page mt-4">
+    <h1 class="title mb-2">Series</h1>
+    {% if total_series > 0 %}
+        <p class="grey-text text-center mb-4">{{ total_series }} series · {{ total_books }} book{{ "s" if total_books != 1 else "" }}</p>
+    {% endif %}
+
+    {% if series_list|length == 0 %}
+        <p class="grey-text text-center my-5">No series yet — any book with a Series field will show up here.</p>
+    {% else %}
+        <div class="series-grid">
+            {% for series_name, books in series_list %}
+                <article class="series-card">
+                    <header class="series-card-header">
+                        <h3 class="series-name">{{ series_name }}</h3>
+                        <span class="series-count">{{ books|length }} book{{ "s" if books|length != 1 else "" }}</span>
+                    </header>
+                    <ul class="series-books">
+                        {% for book in books %}
+                            <li class="series-book">
+                                <a href="/{{ book.category }}" class="series-book-link">
+                                    <span class="series-book-title">{{ book.book }}</span>
+                                    <span class="series-book-meta">
+                                        <span class="series-book-category series-book-category-{{ book.category }}">
+                                            {% if book.category == "tbr" %}TBR
+                                            {% elif book.category == "completed" %}Completed
+                                            {% else %}Unfinished{% endif %}
+                                        </span>
+                                        {% if book.category == "tbr" and book.status %}<span class="series-book-status">{{ book.status }}</span>{% endif %}
+                                    </span>
+                                </a>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </article>
+            {% endfor %}
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

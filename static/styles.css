@@ -515,6 +515,126 @@ a:hover
   }
 
 /* ------------------------------------------------------------------
+   Series page
+   ------------------------------------------------------------------ */
+
+.series-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1rem;
+}
+
+.series-card {
+    background: rgba(255, 255, 255, 0.94);
+    border-radius: 16px;
+    border: 1px solid rgba(49, 8, 31, 0.1);
+    overflow: hidden;
+    box-shadow: 0 6px 16px rgba(49, 8, 31, 0.06);
+    display: flex;
+    flex-direction: column;
+}
+
+.series-card-header {
+    padding: 0.85rem 1rem;
+    background: linear-gradient(135deg, rgba(107, 15, 26, 0.96), rgba(49, 8, 31, 0.94));
+    color: #F8F8F2;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.75rem;
+}
+
+.series-name {
+    margin: 0;
+    font-family: 'Georgia';
+    font-size: 1.05rem;
+    color: #F8F8F2;
+    overflow-wrap: anywhere;
+}
+
+.series-count {
+    font-family: 'Georgia';
+    font-size: 0.75rem;
+    color: rgba(248, 248, 242, 0.85);
+    white-space: nowrap;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.series-books {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.series-book + .series-book {
+    border-top: 1px solid rgba(49, 8, 31, 0.06);
+}
+
+.series-book-link {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.75rem;
+    padding: 0.65rem 1rem;
+    color: #31081F;
+    transition: background-color 0.15s ease;
+}
+
+.series-book-link:hover,
+.series-book-link:focus {
+    background: rgba(107, 15, 26, 0.07);
+    text-decoration: none;
+    color: #31081F;
+}
+
+.series-book-title {
+    flex: 1 1 60%;
+    min-width: 0;
+    font-family: 'Georgia';
+    overflow-wrap: anywhere;
+}
+
+.series-book-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+
+.series-book-category {
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+    padding: 0.18rem 0.5rem;
+    border-radius: 999px;
+    font-weight: 700;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.series-book-category-completed {
+    background: rgba(46, 110, 52, 0.16);
+    color: #2e6e34;
+}
+
+.series-book-category-tbr {
+    background: rgba(107, 15, 26, 0.14);
+    color: #6B0F1A;
+}
+
+.series-book-category-unfinished {
+    background: rgba(149, 109, 0, 0.16);
+    color: #7a5a00;
+}
+
+.series-book-status {
+    font-size: 0.78rem;
+    color: #595959;
+    font-style: italic;
+    overflow-wrap: anywhere;
+}
+
+/* ------------------------------------------------------------------
    Main navbar
    ------------------------------------------------------------------ */
 

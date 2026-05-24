@@ -700,23 +700,44 @@ def parse_tbr_status_marker(line):
     return None
 
 
+UNFINISHED_CHAPTER_PATTERNS = [
+    re.compile(r"\bchapter\b\s*[^\s<>()\[\]{}]+", flags=re.IGNORECASE),
+    re.compile(r"\bvolume\b\s*[^\s<>()\[\]{}]+", flags=re.IGNORECASE),
+    re.compile(r"(?:\d+|[一二三四五六七八九十百千零〇两]+)章", flags=re.IGNORECASE),
+    re.compile(r"(?:\d+|[一二三四五六七八九十百千零〇两]+)页", flags=re.IGNORECASE),
+]
+
+
+def extract_unfinished_chapter(text):
+    matches = [match for pattern in UNFINISHED_CHAPTER_PATTERNS if (match := pattern.search(text))]
+    if not matches:
+        return None, text
+
+    match = max(matches, key=lambda item: item.start())
+    unread_chapter = match.group(0).strip().rstrip(".,;:!?")
+
+    prefix = re.sub(r"[\s<\(\[\{（【｛]+$", "", text[:match.start()])
+    suffix = re.sub(r"^[\s>\)\]\}）】｝]+", "", text[match.end():])
+    cleaned_text = re.sub(r"\s+", " ", f"{prefix} {suffix}").strip()
+    return unread_chapter, cleaned_text
+
+
 def parse_unfinished_line(line):
-    if not has_book_name_prefix(line):
+    cleaned_line = re.sub(r"\(\s*haven['’]?t read\s*\)", "", line, flags=re.IGNORECASE).strip()
+
+    if not has_book_name_prefix(cleaned_line):
         return None
 
-    match = re.match(r"^\s*(.*?)\s*<\s*(.*?)\s*>\s*(.*)$", line)
-    if match:
-        raw_title, unread_chapter, tail = match.groups()
-        status = f"Unread after {unread_chapter.strip()}"
-        extra = f"Last chapter read: {unread_chapter.strip()}"
-        source_text = f"{line} {tail}"
+    unread_chapter, title_source = extract_unfinished_chapter(cleaned_line)
+    status = "Unfinished"
+    if unread_chapter:
+        extra = f"Haven't read {unread_chapter}"
+        source_text = title_source
     else:
-        raw_title = line
-        status = "Unfinished"
         extra = ""
-        source_text = line
+        source_text = cleaned_line
 
-    title, title_notes = parse_title(raw_title)
+    title, title_notes = parse_title(title_source)
     if not title:
         return None
 
@@ -1345,7 +1366,40 @@ def unfinished():
         if "clear" in request.form:
             return redirect("/unfinished")
     return render_category_page("unfinished", "unfinished.html")
-    
+
+
+@app.route("/series")
+def series_view():
+    if not session_user_exists():
+        session.clear()
+        flash("Your session is no longer valid. Please log in again.")
+        return redirect("/")
+
+    series_map = {}
+    category_order = ("completed", "unfinished", "tbr")
+    for category in category_order:
+        within_order = "date ASC, id ASC" if category == "completed" else "date DESC, id DESC"
+        rows = db.execute(
+            f"SELECT id, book, series, status, date FROM {category} "
+            "WHERE user_id = ? AND series IS NOT NULL AND TRIM(series) != '' "
+            f"ORDER BY series, {within_order}",
+            session["user_id"],
+        )
+        for row in rows:
+            key = row["series"].strip()
+            row["category"] = category
+            series_map.setdefault(key, []).append(row)
+
+    series_list = sorted(series_map.items(), key=lambda kv: kv[0].lower())
+    total_books = sum(len(books) for _, books in series_list)
+    return render_template(
+        "series.html",
+        series_list=series_list,
+        total_series=len(series_list),
+        total_books=total_books,
+    )
+
+
 @app.route("/search", methods=["GET", "POST"])
 def search():
     if request.method == "POST":
