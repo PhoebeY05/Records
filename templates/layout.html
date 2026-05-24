@@ -23,12 +23,23 @@
             myModal.show()
             localStorage.setItem("Clicked", "false")
           }
+
+          const searchModal = document.getElementById("searchModal")
+          if (searchModal) {
+            searchModal.addEventListener("shown.bs.modal", function () {
+              const searchInput = searchModal.querySelector('[name="search"]')
+              if (searchInput) {
+                searchInput.focus()
+                searchInput.select()
+              }
+            })
+          }
         })
     </script>
   </head>
   <nav class="navbar navbar-expand-lg navbar-dark bg main-nav sticky-top">
       <div class="container-fluid">
-        <a class="navbar-brand main-nav-brand georgia" href="/home">
+        <a class="navbar-brand main-nav-brand georgia" href="/home" aria-label="Go to home">
           <img src="../static/icon.png" height="34" width="34" alt="">
           <span class="main-nav-brand-text">Reading Records</span>
         </a>
@@ -37,26 +48,71 @@
         </button>
         <div class="collapse navbar-collapse" id="mainNav">
           <ul class="navbar-nav main-nav-links me-auto mb-2 mb-lg-0">
-            <li class="nav-item"><a class="nav-link georgia {% if request.path == '/home' %}active{% endif %}" href="/home">Home</a></li>
-            <li class="nav-item"><a class="nav-link georgia {% if request.path == '/tbr' %}active{% endif %}" href="/tbr">To Be Read</a></li>
-            <li class="nav-item"><a class="nav-link georgia {% if request.path == '/completed' %}active{% endif %}" href="/completed">Completed</a></li>
-            <li class="nav-item"><a class="nav-link georgia {% if request.path == '/unfinished' %}active{% endif %}" href="/unfinished">Unfinished</a></li>
-            <li class="nav-item"><a class="nav-link georgia {% if request.path == '/series' %}active{% endif %}" href="/series">Series</a></li>
-            <li class="nav-item"><a class="nav-link georgia {% if request.path == '/trends' %}active{% endif %}" href="/trends">Trends</a></li>
-            <li class="nav-item"><a class="nav-link georgia {% if request.path == '/add' %}active{% endif %}" href="/add">Add</a></li>
+            {% set books_active = request.path in ['/tbr', '/completed', '/unfinished'] %}
+            {% set insights_active = request.path in ['/series', '/trends'] %}
+            <li class="nav-item dropdown">
+              <a class="nav-link dropdown-toggle georgia {% if books_active %}active{% endif %}" href="#" id="booksDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                Books
+              </a>
+              <ul class="dropdown-menu" aria-labelledby="booksDropdown">
+                <li><a class="dropdown-item georgia {% if request.path == '/tbr' %}active{% endif %}" href="/tbr">To Be Read</a></li>
+                <li><a class="dropdown-item georgia {% if request.path == '/completed' %}active{% endif %}" href="/completed">Completed</a></li>
+                <li><a class="dropdown-item georgia {% if request.path == '/unfinished' %}active{% endif %}" href="/unfinished">Unfinished</a></li>
+              </ul>
+            </li>
+            <li class="nav-item dropdown">
+              <a class="nav-link dropdown-toggle georgia {% if insights_active %}active{% endif %}" href="#" id="insightsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                Insights
+              </a>
+              <ul class="dropdown-menu" aria-labelledby="insightsDropdown">
+                <li><a class="dropdown-item georgia {% if request.path == '/series' %}active{% endif %}" href="/series">Series</a></li>
+                <li><a class="dropdown-item georgia {% if request.path == '/trends' %}active{% endif %}" href="/trends">Trends</a></li>
+              </ul>
+            </li>
           </ul>
-          <form class="main-nav-search d-flex mb-2 mb-lg-0 me-lg-2" action="/search" method="post" role="search">
-            <input class="form-control georgia" type="search" placeholder="Search books..." name="search" aria-label="Search">
-            <button class="btn btn-outline-light georgia ms-2" type="submit">Search</button>
-          </form>
-          <form action="/logout" method="get" class="m-0">
-            <button class="btn btn-outline-light georgia" type="submit">Log Out</button>
-          </form>
+          <div class="main-nav-actions d-flex align-items-center gap-2 mb-2 mb-lg-0">
+            <button type="button" class="btn btn-outline-light main-nav-icon-btn" data-bs-toggle="modal" data-bs-target="#searchModal" aria-label="Search books">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M10.5 4a6.5 6.5 0 1 0 4.09 11.55l4.43 4.43 1.41-1.41-4.43-4.43A6.5 6.5 0 0 0 10.5 4Zm0 2a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9Z"></path>
+              </svg>
+              <span class="visually-hidden">Search</span>
+            </button>
+            <a class="btn btn-outline-light main-nav-icon-btn main-nav-add-btn {% if request.path == '/add' %}active{% endif %}" href="/add" aria-label="Add a book">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M12 5v14M5 12h14"></path>
+              </svg>
+              <span class="visually-hidden">Add</span>
+            </a>
+            <form action="/logout" method="get" class="m-0">
+              <button class="btn btn-outline-light georgia main-nav-logout-btn" type="submit">Log Out</button>
+            </form>
+          </div>
         </div>
       </div>
     </nav>
   <body class="platinum">
       {% block main %}{% endblock %}
+
+      <div class="modal fade search-modal" id="searchModal" tabindex="-1" aria-labelledby="searchModalLabel" aria-hidden="true">
+          <div class="modal-dialog modal-dialog-centered">
+              <div class="modal-content search-modal-content">
+                  <div class="modal-header">
+                      <h2 class="modal-title georgia" id="searchModalLabel">Search books</h2>
+                      <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                  </div>
+                  <form action="/search" method="post" role="search">
+                      <div class="modal-body">
+                          <label class="visually-hidden" for="searchBooksInput">Search books</label>
+                          <input id="searchBooksInput" class="form-control georgia search-modal-input" type="search" placeholder="Search books..." name="search" aria-label="Search books" autocomplete="off">
+                      </div>
+                      <div class="modal-footer">
+                          <button type="button" class="btn btn-outline-secondary georgia" data-bs-dismiss="modal">Cancel</button>
+                          <button class="btn random-modal-primary georgia" type="submit">Search</button>
+                      </div>
+                  </form>
+              </div>
+          </div>
+      </div>
 
       <div class="modal book-detail-modal fade" tabindex="-1" id="bookDetailModal" aria-hidden="true">
           <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
