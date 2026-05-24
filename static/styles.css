@@ -1499,10 +1499,11 @@ a:hover
 
 .book-detail-category-pill {
     font-family: 'Georgia';
+    display: inline-flex;
+    align-items: center;
     font-size: 0.72rem;
     text-transform: uppercase;
     letter-spacing: 0.12em;
-    color: rgba(248, 248, 242, 0.9);
 }
 
 .book-detail-modal .modal-body {

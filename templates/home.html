@@ -104,11 +104,20 @@
             {% if recents|length > 0 %}
                 <div class="book-grid book-grid-recents">
                     {% for book in recents %}
+                        {% if book.page == "completed" %}
+                            {% set page_label = "Completed" %}
+                        {% elif book.page == "unfinished" %}
+                            {% set page_label = "Unfinished" %}
+                        {% elif book.page == "tbr" %}
+                            {% set page_label = "To Be Read" %}
+                        {% else %}
+                            {% set page_label = book.page|upper %}
+                        {% endif %}
                         <a class="book-card card h-100 book-card-link" href="#" data-book-link data-category="{{ book.page }}" data-book-id="{{ book.id }}">
                             <div class="card-body">
                                 <div class="d-flex justify-content-between align-items-start gap-2 mb-2 no-overflow">
                                     <h3 class="book-title h5 mb-0 no-overflow">{{ book.book }}</h3>
-                                    <span class="badge bg-dark-subtle text-dark flex-shrink-0">{{ book.page | upper }}</span>
+                                    <span class="series-book-category series-book-category-{{ book.page }} flex-shrink-0">{{ page_label }}</span>
                                 </div>
                                 <p class="text-muted mb-2 fw-bold">{{ book.date }}</p>
                                 <p class="book-meta mb-0">
@@ -158,7 +167,7 @@
                     <h2 class="accordion-header" id="completedHeading">
                         <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#completed" aria-expanded="false" aria-controls="completed">
                             <span class="me-2">Completed</span>
-                            <span class="badge bg-dark-subtle text-dark">{{ completed_count }}</span>
+                            <span class="badge series-book-category-completed">{{ completed_count }}</span>
                         </button>
                     </h2>
                     <div id="completed" class="accordion-collapse collapse" aria-labelledby="completedHeading" data-bs-parent="#timelineAccordion">
@@ -188,7 +197,7 @@
                     <h2 class="accordion-header" id="unfinishedHeading">
                         <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#unfinished" aria-expanded="false" aria-controls="unfinished">
                             <span class="me-2">Unfinished</span>
-                            <span class="badge bg-dark-subtle text-dark">{{ unfinished_count }}</span>
+                            <span class="badge series-book-category-unfinished">{{ unfinished_count }}</span>
                         </button>
                     </h2>
                     <div id="unfinished" class="accordion-collapse collapse" aria-labelledby="unfinishedHeading" data-bs-parent="#timelineAccordion">
@@ -217,7 +226,7 @@
                     <h2 class="accordion-header" id="tbrHeading">
                         <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#tbr" aria-expanded="false" aria-controls="tbr">
                             <span class="me-2">To Be Read</span>
-                            <span class="badge bg-dark-subtle text-dark">{{ tbr_count }}</span>
+                            <span class="badge series-book-category-tbr">{{ tbr_count }}</span>
                         </button>
                     </h2>
                     <div id="tbr" class="accordion-collapse collapse" aria-labelledby="tbrHeading" data-bs-parent="#timelineAccordion">
