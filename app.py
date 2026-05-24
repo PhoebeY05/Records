@@ -7,6 +7,7 @@ from html import unescape
 from html.parser import HTMLParser
 import io
 import importlib
+import math
 import random
 import re
 import os
@@ -2240,6 +2241,132 @@ def update_book(category, book_id):
 
     flash("Book updated.")
     return redirect(f"/{category}#book-{book_id}")
+
+
+def _parse_genre_list(text):
+    if not text:
+        return []
+    cleaned = sanitize_import_text(text)
+    parts = re.split(r"[,，、;；/|]+", cleaned)
+    return [p.strip() for p in parts if p.strip()]
+
+
+def _genre_freq(rows):
+    freq = {}
+    for row in rows:
+        for genre in row["genres_list"]:
+            freq[genre] = freq.get(genre, 0) + 1
+    return freq
+
+
+def _cosine_distance(a, b):
+    if not a or not b:
+        return 1.0 if (a or b) else 0.0
+    keys = set(a) | set(b)
+    dot = sum(a.get(k, 0) * b.get(k, 0) for k in keys)
+    na = math.sqrt(sum(v * v for v in a.values())) or 1.0
+    nb = math.sqrt(sum(v * v for v in b.values())) or 1.0
+    return 1.0 - dot / (na * nb)
+
+
+def _find_change_points(rows, min_period=3, max_periods=5, min_gain=0.25):
+    """Binary segmentation on the genre signal.
+
+    Returns sorted list of split indices including 0 and len(rows), so
+    consecutive pairs define each period.
+    """
+    n = len(rows)
+    if n < 2 * min_period:
+        return [0, n]
+
+    splits = [0, n]
+    while len(splits) - 1 < max_periods:
+        best_split = None
+        best_gain = 0.0
+        for i in range(len(splits) - 1):
+            start, end = splits[i], splits[i + 1]
+            if end - start < 2 * min_period:
+                continue
+            for candidate in range(start + min_period, end - min_period + 1):
+                left = _genre_freq(rows[start:candidate])
+                right = _genre_freq(rows[candidate:end])
+                gain = _cosine_distance(left, right)
+                if gain > best_gain:
+                    best_gain = gain
+                    best_split = candidate
+        if best_split is None or best_gain < min_gain:
+            break
+        splits.append(best_split)
+        splits.sort()
+    return splits
+
+
+def compute_genre_trends(user_id, top_n=3):
+    """Detect periods of stable genre preference for a user's completed books.
+
+    Returns a dict with periods, current-interest summary, and metadata.
+    """
+    raw_rows = db.execute(
+        "SELECT id, book, date, genres FROM completed WHERE user_id = ?",
+        user_id,
+    )
+
+    parsed = []
+    for row in raw_rows:
+        genres = _parse_genre_list(row.get("genres"))
+        if not genres:
+            continue
+        date_obj = parse_date_text(str(row.get("date") or ""))
+        if date_obj is None:
+            continue
+        parsed.append(
+            {
+                "id": row["id"],
+                "book": row["book"],
+                "date": date_obj,
+                "genres_list": genres,
+            }
+        )
+
+    parsed.sort(key=lambda r: r["date"])
+    splits = _find_change_points(parsed)
+
+    periods = []
+    for i in range(len(splits) - 1):
+        start, end = splits[i], splits[i + 1]
+        period_rows = parsed[start:end]
+        if not period_rows:
+            continue
+        freq = _genre_freq(period_rows)
+        top = sorted(freq.items(), key=lambda kv: (-kv[1], kv[0]))[:top_n]
+        periods.append(
+            {
+                "start_date": period_rows[0]["date"],
+                "end_date": period_rows[-1]["date"],
+                "book_count": len(period_rows),
+                "top_genres": [{"genre": g, "count": c} for g, c in top],
+                "all_genres_count": len(freq),
+                "sample_books": [r["book"] for r in period_rows[:5]],
+            }
+        )
+
+    current = periods[-1]["top_genres"] if periods else []
+
+    return {
+        "total_books": len(parsed),
+        "periods": periods,
+        "current_interest": current,
+    }
+
+
+@app.route("/trends", methods=["GET"])
+def trends_view():
+    if not session_user_exists():
+        session.clear()
+        flash("Your session is no longer valid. Please log in again.")
+        return redirect("/")
+    data = compute_genre_trends(session["user_id"])
+    return render_template("trends.html", trends=data, title="Genre Trends")
 
 
 @app.route("/api/update_genres/<category>/<int:book_id>", methods=["POST"])

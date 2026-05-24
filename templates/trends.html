@@ -1,0 +1,83 @@
+{% extends "layout.html" %}
+
+{% block title %}
+    Genre Trends
+{% endblock %}
+
+{% block main %}
+<div class="container book-list-page mt-4">
+    <h1 class="title mb-4">Genre Trends</h1>
+
+    {% if trends.total_books == 0 %}
+        <div class="alert alert-info" role="alert">
+            <strong>Not enough data yet.</strong>
+            Once you have completed books tagged with genres, this page will
+            show the periods of time where certain genres dominated your reading.
+        </div>
+    {% else %}
+        {% if trends.current_interest %}
+            <div class="card mb-4 trends-current-card">
+                <div class="card-body">
+                    <h2 class="h5 card-title mb-2">You've recently been into…</h2>
+                    <div class="trends-badge-row">
+                        {% for item in trends.current_interest %}
+                            <span class="trends-genre-badge trends-genre-badge-strong">
+                                <span class="trends-genre-name">{{ item.genre }}</span>
+                                <span class="trends-genre-count">×{{ item.count }}</span>
+                            </span>
+                        {% endfor %}
+                    </div>
+                    <p class="trends-current-hint mt-2 mb-0">
+                        Based on the most recent stable period in your completed reading.
+                    </p>
+                </div>
+            </div>
+        {% endif %}
+
+        <div class="trends-periods">
+            <h2 class="h5 mb-3">Periods detected</h2>
+            <p class="trends-meta mb-3">
+                {{ trends.periods | length }} period{% if trends.periods|length != 1 %}s{% endif %}
+                detected across {{ trends.total_books }} completed book{% if trends.total_books != 1 %}s{% endif %}
+                with genres.
+            </p>
+
+            <ol class="trends-period-list">
+                {% for period in trends.periods %}
+                    <li class="trends-period-item {% if loop.last %}trends-period-current{% endif %}">
+                        <div class="trends-period-header">
+                            <span class="trends-period-range">
+                                {{ period.start_date.strftime('%d %b %Y') }}
+                                –
+                                {{ period.end_date.strftime('%d %b %Y') }}
+                            </span>
+                            <span class="trends-period-meta">
+                                {{ period.book_count }} book{% if period.book_count != 1 %}s{% endif %}
+                                · {{ period.all_genres_count }} distinct genre{% if period.all_genres_count != 1 %}s{% endif %}
+                            </span>
+                        </div>
+                        <div class="trends-badge-row">
+                            {% for item in period.top_genres %}
+                                <span class="trends-genre-badge">
+                                    <span class="trends-genre-name">{{ item.genre }}</span>
+                                    <span class="trends-genre-count">×{{ item.count }}</span>
+                                </span>
+                            {% endfor %}
+                        </div>
+                        {% if period.sample_books %}
+                            <details class="trends-period-details">
+                                <summary>Sample books</summary>
+                                <ul class="trends-period-samples">
+                                    {% for b in period.sample_books %}
+                                        <li>{{ b }}</li>
+                                    {% endfor %}
+                                </ul>
+                            </details>
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ol>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -18,6 +18,7 @@ ENV/
 # Flask / local runtime data
 instance/
 books.db
+records.db
 *.sqlite3
 flask_session/
 

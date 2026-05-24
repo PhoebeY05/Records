@@ -1641,3 +1641,93 @@ a:hover
 .table-responsive-wrap {
     overflow-x: auto;
 }
+
+/* --- Genre trends page --- */
+.trends-current-card {
+    border-left: 4px solid #6B0F1A;
+    background: #faf6f3;
+}
+.trends-current-hint {
+    font-size: 0.85rem;
+    color: #6c757d;
+    font-style: italic;
+}
+.trends-badge-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.4rem;
+}
+.trends-genre-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0.65rem;
+    border-radius: 999px;
+    background: #efe7e1;
+    color: #3a2a25;
+    font-family: 'Georgia';
+    font-size: 0.92rem;
+}
+.trends-genre-badge-strong {
+    background: #6B0F1A;
+    color: #fff;
+    font-weight: 600;
+}
+.trends-genre-count {
+    opacity: 0.7;
+    font-size: 0.82em;
+}
+.trends-period-list {
+    list-style: none;
+    padding-left: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.9rem;
+}
+.trends-period-item {
+    border: 1px solid #e0d7cf;
+    border-radius: 10px;
+    padding: 0.9rem 1rem;
+    background: #fff;
+}
+.trends-period-current {
+    border-color: #6B0F1A;
+    background: #fff8f5;
+}
+.trends-period-header {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin-bottom: 0.35rem;
+}
+.trends-period-range {
+    font-family: 'Georgia';
+    font-weight: 700;
+    font-size: 1.02rem;
+    color: #3a2a25;
+}
+.trends-period-meta {
+    font-size: 0.85rem;
+    color: #6c757d;
+}
+.trends-period-details {
+    margin-top: 0.55rem;
+    font-size: 0.9rem;
+}
+.trends-period-details summary {
+    cursor: pointer;
+    color: #6B0F1A;
+}
+.trends-period-samples {
+    margin-top: 0.4rem;
+    padding-left: 1.2rem;
+    color: #3a2a25;
+}
+.trends-meta {
+    font-size: 0.9rem;
+    color: #6c757d;
+}
