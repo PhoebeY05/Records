@@ -90,6 +90,14 @@
             </div>
         </form>
 
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-3" id="bulk-suggest-bar">
+            <button type="button" class="btn btn-outline-secondary" id="bulk-suggest-btn">
+                Suggest genres for all empty rows
+                (<span id="bulk-suggest-empty-count">0</span>)
+            </button>
+            <span id="bulk-suggest-status" class="grey-text" aria-live="polite"></span>
+        </div>
+
         <div class="table-responsive-wrap">
             <table class="table book-table align-middle">
                 <thead>
@@ -105,7 +113,7 @@
                 <tbody>
                     {% for book in books %}
                         {% set collapse_id = 'book-info-' ~ book.id %}
-                        <tr id="book-{{ book.id }}" class="book-row">
+                        <tr id="book-{{ book.id }}" class="book-row" data-book-id="{{ book.id }}" data-book-title="{{ book.book }}" data-needs-genres="{% if not book.genres or book.genres == 'None' %}1{% else %}0{% endif %}">
                             <td class="col-action">
                                 {% block checked scoped %}{% endblock %}
                             </td>
@@ -168,7 +176,10 @@
                                         </label>
                                         <label class="book-edit-field">
                                             <span class="book-edit-label">Genres</span>
-                                            <input type="text" name="genres" value="{{ book.genres or '' }}" placeholder="Comma-separated genres">
+                                            <div class="d-flex gap-2 align-items-stretch">
+                                                <input type="text" name="genres" value="{{ book.genres or '' }}" placeholder="Comma-separated genres" class="flex-grow-1">
+                                                <button type="button" class="btn btn-outline-secondary btn-sm js-suggest-genres">Suggest</button>
+                                            </div>
                                         </label>
                                         <label class="book-edit-field">
                                             <span class="book-edit-label">Series</span>
@@ -259,6 +270,138 @@
                     card.querySelector(".js-edit").hidden = true;
                     const toggle = card.querySelector(".js-edit-toggle");
                     if (toggle) toggle.hidden = false;
+                });
+            });
+
+            // Bulk: suggest genres for every row whose genres column is empty.
+            (function setupBulkSuggest() {
+                const bulkBtn = document.getElementById("bulk-suggest-btn");
+                const statusEl = document.getElementById("bulk-suggest-status");
+                const countEl = document.getElementById("bulk-suggest-empty-count");
+                if (!bulkBtn || !statusEl || !countEl) return;
+
+                const page = {{ page | tojson }};
+                const category = page.replace(/^\//, "");
+                let cancelled = false;
+                let running = false;
+
+                function emptyRows() {
+                    return Array.from(document.querySelectorAll('tr.book-row[data-needs-genres="1"]'));
+                }
+                function refreshCount() {
+                    countEl.textContent = String(emptyRows().length);
+                }
+                refreshCount();
+
+                bulkBtn.addEventListener("click", async function () {
+                    if (running) {
+                        cancelled = true;
+                        bulkBtn.textContent = "Cancelling…";
+                        return;
+                    }
+                    const rows = emptyRows();
+                    if (!rows.length) {
+                        statusEl.textContent = "No empty rows to suggest for.";
+                        return;
+                    }
+                    running = true;
+                    cancelled = false;
+                    const originalLabel = bulkBtn.innerHTML;
+                    bulkBtn.textContent = "Cancel";
+                    let done = 0, ok = 0, skipped = 0;
+                    for (const row of rows) {
+                        if (cancelled) break;
+                        const bookId = row.dataset.bookId;
+                        const title = (row.dataset.bookTitle || "").trim();
+                        if (!bookId || !title) { done++; continue; }
+                        statusEl.textContent = "Suggesting " + (done + 1) + "/" + rows.length + ": " + title;
+                        try {
+                            const inferRes = await fetch("/api/infer_genres", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ title: title }),
+                            });
+                            if (!inferRes.ok) throw new Error("infer HTTP " + inferRes.status);
+                            const inferData = await inferRes.json();
+                            const genres = (inferData.suggestions || [])
+                                .map(function (s) { return s.genre; })
+                                .filter(Boolean);
+                            if (!genres.length) { skipped++; done++; continue; }
+                            const joined = genres.join(", ");
+                            const saveRes = await fetch("/api/update_genres/" + category + "/" + bookId, {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ genres: joined }),
+                            });
+                            if (!saveRes.ok) throw new Error("save HTTP " + saveRes.status);
+                            // Update the visible display + edit form value + row marker.
+                            const displayDd = row.querySelector('.book-info-pair dt + dd');
+                            const allDds = row.querySelectorAll('.book-info-pair');
+                            allDds.forEach(function (pair) {
+                                const dt = pair.querySelector('dt');
+                                if (dt && dt.textContent.trim() === "Genres") {
+                                    const dd = pair.querySelector('dd');
+                                    if (dd) dd.textContent = joined;
+                                }
+                            });
+                            const editInput = row.querySelector('form.book-info-edit [name="genres"]');
+                            if (editInput) editInput.value = joined;
+                            row.dataset.needsGenres = "0";
+                            ok++;
+                        } catch (err) {
+                            skipped++;
+                        }
+                        done++;
+                        refreshCount();
+                    }
+                    statusEl.textContent =
+                        (cancelled ? "Cancelled. " : "Done. ") +
+                        ok + " updated, " + skipped + " skipped.";
+                    bulkBtn.innerHTML = originalLabel;
+                    refreshCount();
+                    running = false;
+                    cancelled = false;
+                });
+            })();
+
+            // Suggest genres button (delegated — one form per book row)
+            document.querySelectorAll(".js-suggest-genres").forEach(function (btn) {
+                btn.addEventListener("click", async function () {
+                    const form = btn.closest("form");
+                    if (!form) return;
+                    const titleInput = form.querySelector('[name="book"]');
+                    const genresInput = form.querySelector('[name="genres"]');
+                    if (!titleInput || !genresInput) return;
+                    const title = (titleInput.value || "").trim();
+                    if (!title) { titleInput.focus(); return; }
+                    const originalLabel = btn.textContent;
+                    const originalPlaceholder = genresInput.placeholder;
+                    btn.disabled = true;
+                    btn.textContent = "…";
+                    try {
+                        const response = await fetch("/api/infer_genres", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ title: title }),
+                        });
+                        if (!response.ok) throw new Error("HTTP " + response.status);
+                        const data = await response.json();
+                        const genres = (data.suggestions || [])
+                            .map(function (s) { return s.genre; })
+                            .filter(Boolean);
+                        if (genres.length) {
+                            genresInput.value = genres.join(", ");
+                        } else {
+                            genresInput.placeholder = "No suggestions found";
+                            setTimeout(function () { genresInput.placeholder = originalPlaceholder; }, 3000);
+                        }
+                    } catch (err) {
+                        genresInput.placeholder = "Suggestion failed — try again";
+                        setTimeout(function () { genresInput.placeholder = originalPlaceholder; }, 3000);
+                    } finally {
+                        btn.disabled = false;
+                        btn.textContent = originalLabel;
+                    }
                 });
             });
         });

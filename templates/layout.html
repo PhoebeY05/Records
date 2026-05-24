@@ -82,7 +82,13 @@
 
                       <div class="book-detail-edit-fields js-edit" hidden>
                           <label class="book-detail-edit-field"><span>Status</span><input type="text" name="status"></label>
-                          <label class="book-detail-edit-field"><span>Genres</span><input type="text" name="genres"></label>
+                          <label class="book-detail-edit-field">
+                              <span>Genres</span>
+                              <div class="d-flex gap-2 align-items-stretch">
+                                  <input type="text" name="genres" class="flex-grow-1">
+                                  <button type="button" class="btn btn-outline-secondary btn-sm js-suggest-genres">Suggest</button>
+                              </div>
+                          </label>
                           <label class="book-detail-edit-field"><span>Series</span><input type="text" name="series"></label>
                       </div>
 
@@ -180,6 +186,45 @@
               modalEl.querySelector(".book-detail-edit-cancel").addEventListener("click", function () {
                   if (currentData) populate(currentData);
               });
+
+              const suggestBtn = modalEl.querySelector(".js-suggest-genres");
+              if (suggestBtn) {
+                  suggestBtn.addEventListener("click", async function () {
+                      const titleInput = form.querySelector('[name="book"]');
+                      const genresInput = form.querySelector('[name="genres"]');
+                      if (!titleInput || !genresInput) return;
+                      const title = (titleInput.value || "").trim();
+                      if (!title) { titleInput.focus(); return; }
+                      const originalLabel = suggestBtn.textContent;
+                      const originalPlaceholder = genresInput.placeholder;
+                      suggestBtn.disabled = true;
+                      suggestBtn.textContent = "…";
+                      try {
+                          const response = await fetch("/api/infer_genres", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ title: title }),
+                          });
+                          if (!response.ok) throw new Error("HTTP " + response.status);
+                          const data = await response.json();
+                          const genres = (data.suggestions || [])
+                              .map(function (s) { return s.genre; })
+                              .filter(Boolean);
+                          if (genres.length) {
+                              genresInput.value = genres.join(", ");
+                          } else {
+                              genresInput.placeholder = "No suggestions found";
+                              setTimeout(function () { genresInput.placeholder = originalPlaceholder; }, 3000);
+                          }
+                      } catch (err) {
+                          genresInput.placeholder = "Suggestion failed — try again";
+                          setTimeout(function () { genresInput.placeholder = originalPlaceholder; }, 3000);
+                      } finally {
+                          suggestBtn.disabled = false;
+                          suggestBtn.textContent = originalLabel;
+                      }
+                  });
+              }
           })();
       </script>
   </body>

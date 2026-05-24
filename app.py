@@ -2242,6 +2242,29 @@ def update_book(category, book_id):
     return redirect(f"/{category}#book-{book_id}")
 
 
+@app.route("/api/update_genres/<category>/<int:book_id>", methods=["POST"])
+def api_update_genres(category, book_id):
+    if not session_user_exists():
+        return {"error": "auth"}, 401
+    if category not in BOOK_PAGES:
+        return {"error": "invalid category"}, 400
+    data = request.get_json() or {}
+    genres = (data.get("genres") or "").strip()
+
+    existing = db.execute(
+        f"SELECT id FROM {category} WHERE id = ? AND user_id = ? LIMIT 1",
+        book_id, session["user_id"],
+    )
+    if not existing:
+        return {"error": "not found"}, 404
+
+    db.execute(
+        f"UPDATE {category} SET genres = ? WHERE id = ? AND user_id = ?",
+        genres, book_id, session["user_id"],
+    )
+    return {"ok": True, "genres": genres}
+
+
 @app.route("/series", methods=["GET", "POST"])
 def series_view():
     if not session_user_exists():
