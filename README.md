@@ -1,10 +1,9 @@
 # Reading Records 
+![Homepage](Images/Homepage.png)
+
 ## Description
 - Book list for unpublished books 
    - e.g. Wattpad, 晋江文学城
-
-
-![Homepage](images/homepage.png)
 
 ## Technologies Used:
 1. Flask
@@ -15,7 +14,7 @@
 6. Bootstrap 5
 7. SQLite3
 
-![Repository Diagram](images/Repository_Diagram.png)
+![Repository Diagram](Images/Repository_Diagram.png)
 
 ## Features:
 1. Login functionality allows user's book list and tastes to remain privacy 
