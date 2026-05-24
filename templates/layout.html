@@ -10,12 +10,11 @@
       <title>{% block title %}{% endblock %}</title>
     <script>
         document.addEventListener("DOMContentLoaded", function () {
-          const choose = document.querySelector("#choose");
-          if (choose) {
-            choose.addEventListener("click", function () {
+          document.querySelectorAll(".js-choose").forEach(function (btn) {
+            btn.addEventListener("click", function () {
               localStorage.setItem("Clicked", "true")
             })
-          }
+          })
           const buttonClicked = localStorage.getItem('Clicked')
           const navigationEntry = performance.getEntriesByType("navigation")[0]
           const randomModal = document.getElementById("random")

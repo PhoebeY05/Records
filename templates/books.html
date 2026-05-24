@@ -11,28 +11,43 @@
         <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
           <div class="modal-content">
             <div class="modal-header">
-              <h5 class="modal-title">Random book chosen</h5>
+              <span class="random-modal-eyebrow">🎲 Your random pick from {{title}}</span>
               <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-              <h2 class="modal-title-wrap">❗️ {{random.book}} ❗️</h2>
-              <dl>
-                {% if random.status and random.status != "None" %}
-                  <dt>Status</dt><dd>{{random.status}}</dd>
-                {% endif %}
-                {% if random.genres and random.genres != "None" %}
-                  <dt>Genres</dt><dd>{{random.genres}}</dd>
-                {% endif %}
-                {% if random.notes and random.notes != "None" %}
-                  <dt>Notes</dt><dd>{{random.notes}}</dd>
-                {% endif %}
-                {% if random.series %}
-                  <dt>Series</dt><dd>{{random.series}}</dd>
-                {% endif %}
-              </dl>
+              <div class="random-modal-spotlight">
+                <span class="random-modal-kicker">Now reading</span>
+                <h2 class="random-modal-title">{{random.book}}</h2>
+              </div>
+
+              {% set badges = [] %}
+              {% if random.status and random.status != "None" %}{% set _ = badges.append(('Status', random.status, 'status')) %}{% endif %}
+              {% if random.series %}{% set _ = badges.append(('Series', random.series, 'series')) %}{% endif %}
+              {% if random.genres and random.genres != "None" %}{% set _ = badges.append(('Genres', random.genres, 'genres')) %}{% endif %}
+
+              {% if badges %}
+                <div class="random-modal-badges">
+                  {% for label, value, kind in badges %}
+                    <span class="random-modal-badge random-modal-badge-{{kind}}">
+                      <span class="random-modal-badge-label">{{label}}</span>
+                      <span class="random-modal-badge-value">{{value}}</span>
+                    </span>
+                  {% endfor %}
+                </div>
+              {% endif %}
+
+              {% if random.notes and random.notes != "None" %}
+                <div class="random-modal-notes">
+                  <p class="random-modal-notes-label">Your notes</p>
+                  <p class="random-modal-notes-text">{{random.notes}}</p>
+                </div>
+              {% endif %}
             </div>
             <div class="modal-footer">
-              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+              <form action="/choose" method="post" class="m-0">
+                <button type="submit" class="btn btn-outline-secondary js-choose">Pick another</button>
+              </form>
+              <button type="button" class="btn random-modal-primary" data-bs-dismiss="modal">Got it</button>
             </div>
           </div>
         </div>
@@ -142,7 +157,7 @@
 
         <div class="choose-fab">
             <form action="/choose" method="post">
-                <button id="choose" type="submit" class="red border-0 btn">Choose a Book</button>
+                <button type="submit" class="red border-0 btn js-choose">Choose a Book</button>
             </form>
         </div>
     </div>
