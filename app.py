@@ -1520,7 +1520,7 @@ def update_book(category, book_id):
     return redirect(f"/{category}#book-{book_id}")
 
 
-@app.route("/series")
+@app.route("/series", methods=["GET", "POST"])
 def series_view():
     if not session_user_exists():
         session.clear()
@@ -1528,6 +1528,10 @@ def series_view():
         return redirect("/")
 
     series_map = {}
+    # Natural sort helper: splits on digit groups so numeric parts sort numerically
+    def _natural_key(s):
+        parts = re.split(r"(\d+)", (s or "").lower())
+        return [int(p) if p.isdigit() else p for p in parts]
     category_order = ("completed", "unfinished", "tbr")
     for category in category_order:
         within_order = "date ASC, id ASC" if category == "completed" else "date DESC, id DESC"
@@ -1542,13 +1546,51 @@ def series_view():
             row["category"] = category
             series_map.setdefault(key, []).append(row)
 
-    series_list = sorted(series_map.items(), key=lambda kv: kv[0].lower())
+    series_list = sorted(series_map.items(), key=lambda kv: _natural_key(kv[0]))
+
+    # Handle min/max book count filters
+    min_books = None
+    max_books = None
+    selected_min = ""
+    selected_max = ""
+    if request.method == "POST":
+        if "clear" in request.form:
+            # ignore filters
+            pass
+        else:
+            try:
+                mb = (request.form.get("min_books") or "").strip()
+                if mb != "":
+                    min_books = int(mb)
+                    selected_min = mb
+            except ValueError:
+                min_books = None
+            try:
+                xb = (request.form.get("max_books") or "").strip()
+                if xb != "":
+                    max_books = int(xb)
+                    selected_max = xb
+            except ValueError:
+                max_books = None
+
+    if min_books is not None or max_books is not None:
+        filtered = []
+        for name, books in series_list:
+            cnt = len(books)
+            if min_books is not None and cnt < min_books:
+                continue
+            if max_books is not None and cnt > max_books:
+                continue
+            filtered.append((name, books))
+        series_list = filtered
     total_books = sum(len(books) for _, books in series_list)
     return render_template(
         "series.html",
         series_list=series_list,
         total_series=len(series_list),
         total_books=total_books,
+        selected_min=selected_min,
+        selected_max=selected_max,
     )
 
 

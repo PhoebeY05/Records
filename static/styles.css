@@ -824,6 +824,45 @@ a:hover
     padding-right: 1.5rem;
 }
 
+.series-filters .series-filter-input {
+    min-height: 44px;
+    border-radius: 25px;
+    border: 2px solid rgba(49, 8, 31, 0.18);
+    background: rgba(255, 255, 255, 0.96);
+    color: #31081F;
+    padding-left: 1rem;
+    padding-right: 1rem;
+    font-family: 'Georgia';
+}
+
+.series-filters .series-filter-input::placeholder {
+    color: #8a7886;
+    font-style: italic;
+}
+
+.series-filters .series-filter-input:focus {
+    border-color: #6B0F1A;
+    box-shadow: 0 0 0 0.2rem rgba(107, 15, 26, 0.15);
+    outline: none;
+}
+
+.series-filters .series-filter-clear {
+    min-height: 44px;
+    border-radius: 25px;
+    border: 2px solid #31081F;
+    background: transparent;
+    color: #31081F;
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+}
+
+.series-filters .series-filter-clear:hover,
+.series-filters .series-filter-clear:focus {
+    background-color: #31081F;
+    color: #DCE0D9;
+    border-color: #31081F;
+}
+
 .book-table {
     table-layout: fixed;
     width: 100%;

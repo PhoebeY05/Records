@@ -5,6 +5,22 @@
 {% block main %}
 <div class="container book-list-page mt-4">
     <h1 class="title mb-2">Series</h1>
+    <form method="post" name="options" class="book-list-filters series-filters mb-3">
+        <div class="row g-2 align-items-stretch justify-content-center">
+            <div class="col-6 col-sm-auto">
+                <input type="number" min="1" name="min_books" class="form-control series-filter-input" placeholder="Min books" value="{{ selected_min or '' }}">
+            </div>
+            <div class="col-6 col-sm-auto">
+                <input type="number" min="1" name="max_books" class="form-control series-filter-input" placeholder="Max books" value="{{ selected_max or '' }}">
+            </div>
+            <div class="col-6 col-sm-auto">
+                <button type="submit" class="btn hidden-info clear-filter-btn w-100">Apply</button>
+            </div>
+            <div class="col-6 col-sm-auto">
+                <button type="submit" name="clear" value="1" class="btn series-filter-clear w-100">Clear</button>
+            </div>
+        </div>
+    </form>
     {% if total_series > 0 %}
         <p class="grey-text text-center mb-4">{{ total_series }} series · {{ total_books }} book{{ "s" if total_books != 1 else "" }}</p>
     {% endif %}
