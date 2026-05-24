@@ -1319,12 +1319,25 @@ def choose():
     page = get_page_from_referrer()
     if page is None:
         return redirect("/home")
-    all = db.execute(f"SELECT * FROM {page}")
-    random.shuffle(all)
-    if all == []:
+    # Prefer filters sent with this request, otherwise fall back to stored filters
+    status_filter = (request.form.get("status_filter") or "").strip() if request.method == "POST" else ""
+    existence_filter = (request.form.get("filter") or "").strip() if request.method == "POST" else ""
+
+    if not (status_filter or existence_filter):
+        stored = session.get("filters", {}).get(page, {})
+        status_filter = stored.get("status_filter", "")
+        existence_filter = stored.get("existence_filter", "")
+
+    if status_filter or existence_filter:
+        candidates = query_books_with_filters(page, session["user_id"], status_filter, existence_filter)
+    else:
+        candidates = db.execute(f"SELECT * FROM {page} WHERE user_id = ?", session["user_id"])
+
+    random.shuffle(candidates)
+    if not candidates:
         session["selected"] = {"book": "No Books Found", "status":"", "genres": "", "notes":"","series":""}
     else:
-        session["selected"] = all[0]
+        session["selected"] = candidates[0]
     return redirect(f"/{page}")
 
 @app.route("/delete", methods = ["GET", "POST"])
@@ -1341,9 +1354,30 @@ def render_category_page(category, template_name):
     referrer = request.headers.get("Referer") or ""
     if category not in referrer:
         session["selected"] = []
+    # Load previously-saved filters for this category
+    saved_filters = session.get("filters", {}).get(category, {})
 
-    status_filter = (request.form.get("status_filter") or "").strip() if request.method == "POST" else ""
-    existence_filter = (request.form.get("filter") or "").strip() if request.method == "POST" else ""
+    if request.method == "POST":
+        # Clear filters when requested
+        if "clear" in request.form:
+            session.setdefault("filters", {}).pop(category, None)
+            status_filter = ""
+            existence_filter = ""
+        else:
+            # Merge new filters with saved ones so selections stack
+            new_status = request.form.get("status_filter")
+            new_exist = request.form.get("filter")
+
+            status_filter = (new_status.strip() if new_status is not None else saved_filters.get("status_filter", ""))
+            existence_filter = (new_exist.strip() if new_exist is not None else saved_filters.get("existence_filter", ""))
+
+            session.setdefault("filters", {})[category] = {
+                "status_filter": status_filter,
+                "existence_filter": existence_filter,
+            }
+    else:
+        status_filter = saved_filters.get("status_filter", "")
+        existence_filter = saved_filters.get("existence_filter", "")
 
     if status_filter or existence_filter:
         books = query_books_with_filters(category, session["user_id"], status_filter, existence_filter)
@@ -1358,6 +1392,7 @@ def render_category_page(category, template_name):
         books=books,
         random=session.get("selected", []),
         selected_status=status_filter,
+        selected_existence=existence_filter,
         status_options=get_status_options(category, session["user_id"]),
     )
 

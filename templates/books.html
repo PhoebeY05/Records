@@ -17,7 +17,9 @@
             <div class="modal-body">
               <div class="random-modal-spotlight">
                 <span class="random-modal-kicker">Now reading</span>
-                <h2 class="random-modal-title">{{random.book}}</h2>
+                                <h2 class="random-modal-title">
+                                    <a href="https://www.google.com/search?q={{ random.book | urlencode }}" target="_blank" rel="noopener noreferrer">{{random.book}}</a>
+                                </h2>
               </div>
 
               {% set badges = [] %}
@@ -68,10 +70,10 @@
             <div class="row g-2 align-items-stretch">
                 <div class="col-12 col-md">
                     <select class="form-select grey" name="filter" onchange="this.form.submit()">
-                        <option value="" selected>Filter by existence of...</option>
-                        <option value="series">Series</option>
-                        <option value="notes">Notes</option>
-                        <option value="genres">Genres</option>
+                        <option value="" {% if selected_existence == "" %}selected{% endif %}>Filter by existence of...</option>
+                        <option value="series" {% if selected_existence == "series" %}selected{% endif %}>Series</option>
+                        <option value="notes" {% if selected_existence == "notes" %}selected{% endif %}>Notes</option>
+                        <option value="genres" {% if selected_existence == "genres" %}selected{% endif %}>Genres</option>
                     </select>
                 </div>
                 <div class="col-12 col-md">
