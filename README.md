@@ -31,17 +31,17 @@
 10. Easily add 1 to number of times reread
 11. Import multiple books from a .txt file to "Completed", "Unfinished" or "To Be Read"
 ## Possible Improvements:
-- Filter by language
-- Input to set number of rereads
-- Link to book website (e.g. Wattpad, 晋江文学城）
+- [ ] Filter by language
+- [ ] Input to set number of rereads
+- [ ] Link to book website (e.g. Wattpad, 晋江文学城）
   - Automatically retrieve status of book
-- Prompt for reviews when switched to "Completed"
-- Estimated time of completion for book (data analytics)
-- Show periods of times where some genres are preferred (clustering)
-- Tags that can be used as reusable notes (e.g. #nice) or standard genres (e.g. #fiction)
-- Symbol to represent anticipated book (e.g. ✔️)
-- Number to represent series (for unnamed book series)
-- Edit book name & other fields by clicking on them in the list view (respective pages)
+- [ ] Prompt for reviews when switched to "Completed"
+- [ ] Estimated time of completion for book (data analytics)
+- [ ] Show periods of times where some genres are preferred (clustering)
+- [x] Tags that can be used as reusable notes (e.g. #nice) or standard genres (e.g. #fiction)
+- [x] Symbol to represent anticipated book (e.g. ✔️)
+- [x] Number to represent series (for unnamed book series)
+- [x] Edit book name & other fields by clicking on them in the list view (respective pages)
 
 # How to visit?
 ## localhost
