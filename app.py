@@ -1410,6 +1410,50 @@ def unfinished():
     return render_category_page("unfinished", "unfinished.html")
 
 
+@app.route("/update/<category>/<int:book_id>", methods=["POST"])
+def update_book(category, book_id):
+    if not session_user_exists():
+        session.clear()
+        flash("Your session is no longer valid. Please log in again.")
+        return redirect("/")
+
+    if category not in BOOK_PAGES:
+        flash("Invalid category.")
+        return redirect("/home")
+
+    book_name = (request.form.get("book") or "").strip()
+    status = (request.form.get("status") or "").strip()
+    genres = (request.form.get("genres") or "").strip()
+    series = (request.form.get("series") or "").strip()
+    notes = (request.form.get("notes") or "").strip()
+
+    if not book_name:
+        flash("Book name cannot be empty.")
+        return redirect(f"/{category}#book-{book_id}")
+
+    existing = db.execute(
+        f"SELECT id FROM {category} WHERE id = ? AND user_id = ? LIMIT 1",
+        book_id, session["user_id"],
+    )
+    if not existing:
+        flash("That book no longer exists.")
+        return redirect(f"/{category}")
+
+    db.execute(
+        f"UPDATE {category} SET book = ?, status = ?, genres = ?, series = ?, notes = ? "
+        "WHERE id = ? AND user_id = ?",
+        book_name, status, genres, series, notes,
+        book_id, session["user_id"],
+    )
+    db.execute(
+        "UPDATE combined SET book = ? WHERE id = ? AND user_id = ? AND page = ?",
+        book_name, book_id, session["user_id"], category,
+    )
+
+    flash("Book updated.")
+    return redirect(f"/{category}#book-{book_id}")
+
+
 @app.route("/series")
 def series_view():
     if not session_user_exists():

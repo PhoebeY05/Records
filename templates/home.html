@@ -104,7 +104,7 @@
             {% if recents|length > 0 %}
                 <div class="book-grid book-grid-recents">
                     {% for book in recents %}
-                        <article class="book-card card h-100">
+                        <a class="book-card card h-100 book-card-link" href="/{{ book.page }}#book-{{ book.id }}">
                             <div class="card-body">
                                 <div class="d-flex justify-content-between align-items-start gap-2 mb-2 no-overflow">
                                     <h3 class="book-title h5 mb-0 no-overflow">{{ book.book }}</h3>
@@ -117,7 +117,7 @@
                                     {% if book.reread %}{{ book.reread }}{% endif %}
                                 </p>
                             </div>
-                        </article>
+                        </a>
                     {% endfor %}
                 </div>
             {% else %}
@@ -167,13 +167,13 @@
                                 <ul class="timeline timeline-modern mb-0">
                                     {% for book in completed %}
                                         <li class="timeline-item timeline-modern-item">
-                                            <div class="timeline-card card book-card">
+                                            <a class="timeline-card card book-card book-card-link" href="/completed#book-{{ book.id }}">
                                                 <div class="card-body">
                                                 <h3 class="book-title h5 mb-1">{{ book.book }}</h3>
                                                 <p class="text-muted mb-2 fw-bold">{{ book.date }}</p>
                                                 <p class="book-meta mb-0">{{ book.notes }}</p>
                                                 </div>
-                                            </div>
+                                            </a>
                                         </li>
                                     {% endfor %}
                                 </ul>
@@ -197,12 +197,12 @@
                                 <ul class="timeline timeline-modern mb-0">
                                     {% for book in unfinished %}
                                         <li class="timeline-item timeline-modern-item">
-                                            <div class="timeline-card card book-card">
+                                            <a class="timeline-card card book-card book-card-link" href="/unfinished#book-{{ book.id }}">
                                                 <div class="card-body">
                                                 <h3 class="book-title h5 mb-1">{{ book.book }}</h3>
                                                 <p class="text-muted mb-0 fw-bold">{{ book.date }}</p>
                                                 </div>
-                                            </div>
+                                            </a>
                                         </li>
                                     {% endfor %}
                                 </ul>
@@ -226,7 +226,7 @@
                                 <ul class="timeline timeline-modern mb-0">
                                     {% for book in tbr %}
                                         <li class="timeline-item timeline-modern-item">
-                                            <div class="timeline-card card book-card">
+                                            <a class="timeline-card card book-card book-card-link" href="/tbr#book-{{ book.id }}">
                                                 <div class="card-body">
                                                 <h3 class="book-title h5 mb-1">{{ book.book }}</h3>
                                                 <p class="text-muted mb-2 fw-bold">{{ book.date }}</p>
@@ -235,7 +235,7 @@
                                                     {% if book.reread %}{{ book.reread }}{% endif %}
                                                 </p>
                                                 </div>
-                                            </div>
+                                            </a>
                                         </li>
                                     {% endfor %}
                                 </ul>

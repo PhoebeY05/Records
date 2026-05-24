@@ -414,6 +414,21 @@ a:hover
     background: rgba(255, 255, 255, 0.88);
 }
 
+.book-card-link {
+    color: inherit;
+    text-decoration: none;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    display: block;
+}
+
+.book-card-link:hover,
+.book-card-link:focus {
+    color: inherit;
+    text-decoration: none;
+    transform: translateY(-2px);
+    box-shadow: 0 14px 24px rgba(49, 8, 31, 0.12);
+}
+
 .book-card .card-body {
     padding: 1rem 1rem 0.9rem;
 }
@@ -852,6 +867,20 @@ a:hover
     min-width: 0;
 }
 
+.book-row {
+    transition: background-color 0.4s ease;
+}
+
+@keyframes book-row-flash {
+    0% { background-color: rgba(255, 235, 130, 0.65); }
+    60% { background-color: rgba(255, 235, 130, 0.35); }
+    100% { background-color: transparent; }
+}
+
+.book-row.book-flash > td {
+    animation: book-row-flash 2.4s ease-out;
+}
+
 .book-name {
     flex: 1 1 auto;
     min-width: 0;
@@ -944,6 +973,83 @@ a:hover
     background: linear-gradient(135deg, transparent 50%, rgba(49, 8, 31, 0.07) 50%, rgba(49, 8, 31, 0.12) 100%);
     border-bottom-right-radius: 18px;
     pointer-events: none;
+}
+
+.book-info-edit-btn {
+    position: absolute;
+    top: 0.65rem;
+    right: 0.75rem;
+    background: rgba(255, 255, 255, 0.6);
+    border: 1px solid rgba(49, 8, 31, 0.18);
+    border-radius: 999px;
+    padding: 0.18rem 0.7rem;
+    font-family: 'Georgia';
+    font-size: 0.78rem;
+    color: #31081F;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
+    z-index: 1;
+}
+
+.book-info-edit-btn:hover,
+.book-info-edit-btn:focus {
+    background: #31081F;
+    color: #F8F8F2;
+    border-color: #31081F;
+}
+
+.book-info-edit {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    margin: 0;
+}
+
+.book-edit-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.book-edit-label {
+    font-family: 'Georgia';
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #6B0F1A;
+}
+
+.book-edit-field input,
+.book-edit-field textarea {
+    width: 100%;
+    padding: 0.45rem 0.6rem;
+    border-radius: 8px;
+    border: 1px solid rgba(49, 8, 31, 0.25);
+    background: rgba(255, 255, 255, 0.85);
+    font-family: 'Georgia';
+    color: #31081F;
+    font-size: 0.95rem;
+}
+
+.book-edit-field input:focus,
+.book-edit-field textarea:focus {
+    outline: none;
+    border-color: #6B0F1A;
+    box-shadow: 0 0 0 0.15rem rgba(107, 15, 26, 0.22);
+    background: #fff;
+}
+
+.book-edit-field textarea {
+    resize: vertical;
+    min-height: 70px;
+}
+
+.book-edit-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    margin-top: 0.4rem;
 }
 
 .book-info-layout {

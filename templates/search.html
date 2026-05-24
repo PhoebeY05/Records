@@ -44,7 +44,7 @@
                             {% set link = "/home" %}
                             {% set category_label = book.category %}
                         {% endif %}
-                        <a class="search-card text-decoration-none" href="{{link}}" data-bs-toggle="tooltip" data-bs-title="Open {{category_label}}">
+                        <a class="search-card text-decoration-none" href="{{link}}#book-{{book.id}}" data-bs-toggle="tooltip" data-bs-title="Open {{category_label}}">
                             <span class="search-status">{{category_label}}</span>
                             <h5 class="search-title">{{book.book}}</h5>
                             <p class="search-meta mb-0">Added {{book.date}}{% if book.status %} · Status: {{book.status}}{% endif %}</p>

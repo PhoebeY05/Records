@@ -55,6 +55,13 @@
     {% endif %}
 
     <div class="container book-list-page mt-4">
+        {% for msg in get_flashed_messages() %}
+        <div class="alert alert-info alert-dismissible fade show" role="alert">
+            {{msg}}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endfor %}
+
         <h1 class="title mb-4">{{title}}</h1>
 
         <form action="{{page}}" method="post" name="options" class="book-list-filters mb-3">
@@ -95,8 +102,8 @@
                 </thead>
                 <tbody>
                     {% for book in books %}
-                        {% set collapse_id = 'book-info-' ~ loop.index %}
-                        <tr>
+                        {% set collapse_id = 'book-info-' ~ book.id %}
+                        <tr id="book-{{ book.id }}" class="book-row">
                             <td class="col-action">
                                 {% block checked scoped %}{% endblock %}
                             </td>
@@ -130,9 +137,11 @@
                         <tr class="collapse" id="{{collapse_id}}">
                             <td colspan="6" class="bg-transparent border-0 pt-0">
                                 <div class="book-info-card">
-                                    <div class="book-info-layout">
+                                    <button type="button" class="book-info-edit-btn js-edit-toggle" aria-label="Edit book">✎ Edit</button>
+                                    <div class="book-info-display js-display">
                                         <dl class="book-info-meta">
                                             <div class="book-info-pair"><dt>Date added</dt><dd>{{book.date}}</dd></div>
+                                            <div class="book-info-pair"><dt>Status</dt><dd>{{book.status or "—"}}</dd></div>
                                             <div class="book-info-pair"><dt>Genres</dt><dd>{{book.genres or "—"}}</dd></div>
                                             <div class="book-info-pair"><dt>Series</dt><dd>{{book.series or "—"}}</dd></div>
                                             {% if book.reread is defined %}<div class="book-info-pair"><dt>Rereads</dt><dd>{{book.reread}} time(s)</dd></div>{% endif %}
@@ -143,6 +152,35 @@
                                             <p class="book-info-notes-text">{{book.notes or "—"}}</p>
                                         </div>
                                     </div>
+                                    <form action="/update/{{ page.lstrip('/') }}/{{ book.id }}" method="post" class="book-info-edit js-edit" hidden>
+                                        <label class="book-edit-field">
+                                            <span class="book-edit-label">Book name</span>
+                                            <input type="text" name="book" value="{{ book.book }}" required>
+                                        </label>
+                                        <label class="book-edit-field">
+                                            <span class="book-edit-label">Status</span>
+                                            <input type="text" name="status" value="{{ book.status or '' }}" list="status-options-{{ book.id }}" placeholder="e.g. Finished">
+                                            <datalist id="status-options-{{ book.id }}">
+                                                {% for s in status_options %}<option value="{{ s }}">{% endfor %}
+                                            </datalist>
+                                        </label>
+                                        <label class="book-edit-field">
+                                            <span class="book-edit-label">Genres</span>
+                                            <input type="text" name="genres" value="{{ book.genres or '' }}" placeholder="Comma-separated genres">
+                                        </label>
+                                        <label class="book-edit-field">
+                                            <span class="book-edit-label">Series</span>
+                                            <input type="text" name="series" value="{{ book.series or '' }}" placeholder="Series name">
+                                        </label>
+                                        <label class="book-edit-field">
+                                            <span class="book-edit-label">Notes</span>
+                                            <textarea name="notes" rows="3">{{ book.notes or '' }}</textarea>
+                                        </label>
+                                        <div class="book-edit-actions">
+                                            <button type="button" class="btn btn-outline-secondary js-edit-cancel">Cancel</button>
+                                            <button type="submit" class="btn random-modal-primary">Save</button>
+                                        </div>
+                                    </form>
                                 </div>
                             </td>
                         </tr>
@@ -161,4 +199,43 @@
             </form>
         </div>
     </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            // Scroll-to + open + flash via hash
+            const hash = window.location.hash;
+            if (hash && hash.startsWith("#book-")) {
+                const row = document.querySelector(hash);
+                if (row) {
+                    const bookId = hash.slice("#book-".length);
+                    const collapse = document.getElementById("book-info-" + bookId);
+                    if (collapse) {
+                        bootstrap.Collapse.getOrCreateInstance(collapse, { toggle: false }).show();
+                    }
+                    row.scrollIntoView({ behavior: "smooth", block: "center" });
+                    row.classList.add("book-flash");
+                    setTimeout(function () { row.classList.remove("book-flash"); }, 2600);
+                }
+            }
+
+            // Inline edit toggle
+            document.querySelectorAll(".js-edit-toggle").forEach(function (btn) {
+                btn.addEventListener("click", function () {
+                    const card = btn.closest(".book-info-card");
+                    card.querySelector(".js-display").hidden = true;
+                    card.querySelector(".js-edit").hidden = false;
+                    btn.hidden = true;
+                });
+            });
+            document.querySelectorAll(".js-edit-cancel").forEach(function (btn) {
+                btn.addEventListener("click", function () {
+                    const card = btn.closest(".book-info-card");
+                    card.querySelector(".js-display").hidden = false;
+                    card.querySelector(".js-edit").hidden = true;
+                    const toggle = card.querySelector(".js-edit-toggle");
+                    if (toggle) toggle.hidden = false;
+                });
+            });
+        });
+    </script>
 {% endblock %}
