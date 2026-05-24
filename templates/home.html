@@ -104,7 +104,7 @@
             {% if recents|length > 0 %}
                 <div class="book-grid book-grid-recents">
                     {% for book in recents %}
-                        <a class="book-card card h-100 book-card-link" href="/{{ book.page }}#book-{{ book.id }}">
+                        <a class="book-card card h-100 book-card-link" href="#" data-book-link data-category="{{ book.page }}" data-book-id="{{ book.id }}">
                             <div class="card-body">
                                 <div class="d-flex justify-content-between align-items-start gap-2 mb-2 no-overflow">
                                     <h3 class="book-title h5 mb-0 no-overflow">{{ book.book }}</h3>
@@ -167,7 +167,7 @@
                                 <ul class="timeline timeline-modern mb-0">
                                     {% for book in completed %}
                                         <li class="timeline-item timeline-modern-item">
-                                            <a class="timeline-card card book-card book-card-link" href="/completed#book-{{ book.id }}">
+                                            <a class="timeline-card card book-card book-card-link" href="#" data-book-link data-category="completed" data-book-id="{{ book.id }}">
                                                 <div class="card-body">
                                                 <h3 class="book-title h5 mb-1">{{ book.book }}</h3>
                                                 <p class="text-muted mb-2 fw-bold">{{ book.date }}</p>
@@ -197,7 +197,7 @@
                                 <ul class="timeline timeline-modern mb-0">
                                     {% for book in unfinished %}
                                         <li class="timeline-item timeline-modern-item">
-                                            <a class="timeline-card card book-card book-card-link" href="/unfinished#book-{{ book.id }}">
+                                            <a class="timeline-card card book-card book-card-link" href="#" data-book-link data-category="unfinished" data-book-id="{{ book.id }}">
                                                 <div class="card-body">
                                                 <h3 class="book-title h5 mb-1">{{ book.book }}</h3>
                                                 <p class="text-muted mb-0 fw-bold">{{ book.date }}</p>
@@ -226,7 +226,7 @@
                                 <ul class="timeline timeline-modern mb-0">
                                     {% for book in tbr %}
                                         <li class="timeline-item timeline-modern-item">
-                                            <a class="timeline-card card book-card book-card-link" href="/tbr#book-{{ book.id }}">
+                                            <a class="timeline-card card book-card book-card-link" href="#" data-book-link data-category="tbr" data-book-id="{{ book.id }}">
                                                 <div class="card-body">
                                                 <h3 class="book-title h5 mb-1">{{ book.book }}</h3>
                                                 <p class="text-muted mb-2 fw-bold">{{ book.date }}</p>

@@ -41,8 +41,8 @@
             <li class="nav-item"><a class="nav-link georgia {% if request.path == '/tbr' %}active{% endif %}" href="/tbr">To Be Read</a></li>
             <li class="nav-item"><a class="nav-link georgia {% if request.path == '/completed' %}active{% endif %}" href="/completed">Completed</a></li>
             <li class="nav-item"><a class="nav-link georgia {% if request.path == '/unfinished' %}active{% endif %}" href="/unfinished">Unfinished</a></li>
-            <li class="nav-item"><a class="nav-link georgia {% if request.path == '/add' %}active{% endif %}" href="/add">Add</a></li>
             <li class="nav-item"><a class="nav-link georgia {% if request.path == '/series' %}active{% endif %}" href="/series">Series</a></li>
+            <li class="nav-item"><a class="nav-link georgia {% if request.path == '/add' %}active{% endif %}" href="/add">Add</a></li>
           </ul>
           <form class="main-nav-search d-flex mb-2 mb-lg-0 me-lg-2" action="/search" method="post" role="search">
             <input class="form-control georgia" type="search" placeholder="Search books..." name="search" aria-label="Search">
@@ -56,5 +56,131 @@
     </nav>
   <body class="platinum">
       {% block main %}{% endblock %}
+
+      <div class="modal book-detail-modal fade" tabindex="-1" id="bookDetailModal" aria-hidden="true">
+          <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+              <form class="modal-content book-detail-form" method="post" action="">
+                  <div class="modal-header">
+                      <span class="book-detail-category-pill"></span>
+                      <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                  </div>
+                  <div class="modal-body">
+                      <h2 class="book-detail-title js-view"></h2>
+                      <label class="book-detail-edit-field js-edit" hidden>
+                          <span>Book name</span>
+                          <input type="text" name="book" required>
+                      </label>
+
+                      <dl class="book-detail-meta js-view">
+                          <div class="book-detail-pair"><dt>Status</dt><dd class="book-detail-status"></dd></div>
+                          <div class="book-detail-pair"><dt>Date added</dt><dd class="book-detail-date"></dd></div>
+                          <div class="book-detail-pair"><dt>Genres</dt><dd class="book-detail-genres"></dd></div>
+                          <div class="book-detail-pair"><dt>Series</dt><dd class="book-detail-series"></dd></div>
+                          <div class="book-detail-pair book-detail-reread-pair" hidden><dt>Rereads</dt><dd class="book-detail-reread"></dd></div>
+                          <div class="book-detail-pair book-detail-days-pair" hidden><dt>Days to finish</dt><dd class="book-detail-days"></dd></div>
+                      </dl>
+
+                      <div class="book-detail-edit-fields js-edit" hidden>
+                          <label class="book-detail-edit-field"><span>Status</span><input type="text" name="status"></label>
+                          <label class="book-detail-edit-field"><span>Genres</span><input type="text" name="genres"></label>
+                          <label class="book-detail-edit-field"><span>Series</span><input type="text" name="series"></label>
+                      </div>
+
+                      <div class="book-detail-notes-section js-view">
+                          <p class="book-detail-notes-label">Notes</p>
+                          <p class="book-detail-notes-text"></p>
+                      </div>
+                      <label class="book-detail-edit-field js-edit" hidden>
+                          <span>Notes</span>
+                          <textarea name="notes" rows="4"></textarea>
+                      </label>
+                  </div>
+                  <div class="modal-footer">
+                      <button type="button" class="btn btn-outline-secondary book-detail-edit-toggle js-view-mode">✎ Edit</button>
+                      <button type="button" class="btn btn-outline-secondary book-detail-edit-cancel js-edit-mode" hidden>Cancel</button>
+                      <button type="submit" class="btn random-modal-primary js-edit-mode" hidden>Save</button>
+                      <button type="button" class="btn btn-secondary js-view-mode" data-bs-dismiss="modal">Close</button>
+                  </div>
+              </form>
+          </div>
+      </div>
+
+      <script>
+          (function () {
+              const modalEl = document.getElementById("bookDetailModal");
+              if (!modalEl) return;
+              const form = modalEl.querySelector(".book-detail-form");
+              const CATEGORY_LABELS = { completed: "Completed", unfinished: "Unfinished", tbr: "To Be Read" };
+              let currentData = null;
+
+              function setEditMode(editing) {
+                  modalEl.querySelectorAll(".js-view").forEach(function (el) { el.hidden = editing; });
+                  modalEl.querySelectorAll(".js-edit").forEach(function (el) { el.hidden = !editing; });
+                  modalEl.querySelectorAll(".js-view-mode").forEach(function (el) { el.hidden = editing; });
+                  modalEl.querySelectorAll(".js-edit-mode").forEach(function (el) { el.hidden = !editing; });
+              }
+
+              function populate(data) {
+                  currentData = data;
+                  form.action = "/update/" + data.category + "/" + data.id;
+                  modalEl.querySelector(".book-detail-category-pill").textContent = CATEGORY_LABELS[data.category] || data.category;
+                  modalEl.querySelector(".book-detail-title").textContent = data.book;
+                  modalEl.querySelector(".book-detail-status").textContent = data.status || "—";
+                  modalEl.querySelector(".book-detail-date").textContent = data.date || "—";
+                  modalEl.querySelector(".book-detail-genres").textContent = data.genres || "—";
+                  modalEl.querySelector(".book-detail-series").textContent = data.series || "—";
+                  modalEl.querySelector(".book-detail-notes-text").textContent = data.notes || "—";
+
+                  const rereadPair = modalEl.querySelector(".book-detail-reread-pair");
+                  if (data.reread !== undefined) {
+                      rereadPair.hidden = false;
+                      modalEl.querySelector(".book-detail-reread").textContent = data.reread + " time(s)";
+                  } else { rereadPair.hidden = true; }
+
+                  const daysPair = modalEl.querySelector(".book-detail-days-pair");
+                  if (data.days !== undefined) {
+                      daysPair.hidden = false;
+                      modalEl.querySelector(".book-detail-days").textContent = data.days;
+                  } else { daysPair.hidden = true; }
+
+                  form.querySelector('[name="book"]').value = data.book || "";
+                  form.querySelector('[name="status"]').value = data.status || "";
+                  form.querySelector('[name="genres"]').value = data.genres || "";
+                  form.querySelector('[name="series"]').value = data.series || "";
+                  form.querySelector('[name="notes"]').value = data.notes || "";
+
+                  setEditMode(false);
+              }
+
+              document.addEventListener("click", function (e) {
+                  const link = e.target.closest("[data-book-link]");
+                  if (!link) return;
+                  e.preventDefault();
+                  const category = link.dataset.category;
+                  const bookId = link.dataset.bookId;
+                  if (!category || !bookId) return;
+                  fetch("/api/book/" + category + "/" + bookId)
+                      .then(function (r) {
+                          if (!r.ok) throw new Error("HTTP " + r.status);
+                          return r.json();
+                      })
+                      .then(function (data) {
+                          populate(data);
+                          bootstrap.Modal.getOrCreateInstance(modalEl).show();
+                      })
+                      .catch(function (err) {
+                          console.error("Failed to load book", err);
+                          window.location.href = "/" + category;
+                      });
+              });
+
+              modalEl.querySelector(".book-detail-edit-toggle").addEventListener("click", function () {
+                  setEditMode(true);
+              });
+              modalEl.querySelector(".book-detail-edit-cancel").addEventListener("click", function () {
+                  if (currentData) populate(currentData);
+              });
+          })();
+      </script>
   </body>
 </html>

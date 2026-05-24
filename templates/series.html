@@ -22,7 +22,7 @@
                     <ul class="series-books">
                         {% for book in books %}
                             <li class="series-book">
-                                <a href="/{{ book.category }}#book-{{ book.id }}" class="series-book-link">
+                                <a href="#" class="series-book-link" data-book-link data-category="{{ book.category }}" data-book-id="{{ book.id }}">
                                     <span class="series-book-title">{{ book.book }}</span>
                                     <span class="series-book-meta">
                                         <span class="series-book-category series-book-category-{{ book.category }}">

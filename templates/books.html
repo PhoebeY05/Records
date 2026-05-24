@@ -126,7 +126,7 @@
                                 <span class="book-date">{{book.date}}</span>
                             </td>
                             <td class="col-info">
-                                <button class="book-info-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#{{collapse_id}}" aria-expanded="false" aria-controls="{{collapse_id}}">
+                                <button class="book-info-toggle js-book-toggle" type="button" data-target="book-info-{{ book.id }}" aria-expanded="false" aria-controls="book-info-{{ book.id }}">
                                     <img src="../static/more.png" alt="More Info" height="26" width="26">
                                 </button>
                             </td>
@@ -134,8 +134,8 @@
                                 {% block crossed scoped %}{% endblock %}
                             </td>
                         </tr>
-                        <tr class="collapse" id="{{collapse_id}}">
-                            <td colspan="6" class="bg-transparent border-0 pt-0">
+                        <tr class="book-info-row" id="{{collapse_id}}" hidden>
+                            <td colspan="6" class="book-info-cell">
                                 <div class="book-info-card">
                                     <button type="button" class="book-info-edit-btn js-edit-toggle" aria-label="Edit book">✎ Edit</button>
                                     <div class="book-info-display js-display">
@@ -202,19 +202,42 @@
 
     <script>
         document.addEventListener("DOMContentLoaded", function () {
-            // Scroll-to + open + flash via hash
+            function showInfoRow(infoRow) {
+                infoRow.hidden = false;
+                const button = document.querySelector('.js-book-toggle[data-target="' + infoRow.id + '"]');
+                if (button) button.setAttribute("aria-expanded", "true");
+            }
+            function hideInfoRow(infoRow) {
+                infoRow.hidden = true;
+                const button = document.querySelector('.js-book-toggle[data-target="' + infoRow.id + '"]');
+                if (button) button.setAttribute("aria-expanded", "false");
+            }
+
+            document.querySelectorAll(".js-book-toggle").forEach(function (btn) {
+                btn.addEventListener("click", function () {
+                    const target = document.getElementById(btn.dataset.target);
+                    if (!target) return;
+                    if (target.hidden) showInfoRow(target);
+                    else hideInfoRow(target);
+                });
+            });
+
             const hash = window.location.hash;
             if (hash && hash.startsWith("#book-")) {
                 const row = document.querySelector(hash);
                 if (row) {
                     const bookId = hash.slice("#book-".length);
-                    const collapse = document.getElementById("book-info-" + bookId);
-                    if (collapse) {
-                        bootstrap.Collapse.getOrCreateInstance(collapse, { toggle: false }).show();
-                    }
-                    row.scrollIntoView({ behavior: "smooth", block: "center" });
-                    row.classList.add("book-flash");
-                    setTimeout(function () { row.classList.remove("book-flash"); }, 2600);
+                    const infoRow = document.getElementById("book-info-" + bookId);
+                    if (infoRow) showInfoRow(infoRow);
+                    requestAnimationFrame(function () {
+                        const nav = document.querySelector(".main-nav");
+                        const navOffset = nav ? nav.offsetHeight : 0;
+                        const rowTop = row.getBoundingClientRect().top + window.scrollY;
+                        const target = Math.max(0, rowTop - navOffset - 16);
+                        window.scrollTo({ top: target, behavior: "smooth" });
+                        row.classList.add("book-flash");
+                        setTimeout(function () { row.classList.remove("book-flash"); }, 2600);
+                    });
                 }
             }
 

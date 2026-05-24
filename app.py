@@ -1411,6 +1411,36 @@ def unfinished():
     return render_category_page("unfinished", "unfinished.html")
 
 
+@app.route("/api/book/<category>/<int:book_id>")
+def book_detail_api(category, book_id):
+    if not session_user_exists():
+        return {"error": "unauthorized"}, 401
+    if category not in BOOK_PAGES:
+        return {"error": "invalid category"}, 404
+    rows = db.execute(
+        f"SELECT * FROM {category} WHERE id = ? AND user_id = ? LIMIT 1",
+        book_id, session["user_id"],
+    )
+    if not rows:
+        return {"error": "not found"}, 404
+    book = rows[0]
+    payload = {
+        "id": book["id"],
+        "category": category,
+        "book": book["book"],
+        "status": book.get("status") or "",
+        "date": str(book.get("date") or ""),
+        "genres": book.get("genres") or "",
+        "notes": book.get("notes") or "",
+        "series": book.get("series") or "",
+    }
+    if "reread" in book:
+        payload["reread"] = book["reread"]
+    if "days" in book:
+        payload["days"] = book["days"]
+    return payload
+
+
 @app.route("/update/<category>/<int:book_id>", methods=["POST"])
 def update_book(category, book_id):
     if not session_user_exists():
@@ -1507,6 +1537,9 @@ def search():
             for r in rows:
                 r["category"] = category
                 results.append(r)
+        # Sort results by date (newest first). Dates are stored as YYYY-MM-DD strings,
+        # so string-sort works; fall back to empty string for missing dates.
+        results.sort(key=lambda r: (r.get("date") or ""), reverse=True)
         return render_template("search.html", results=results, search=book)
     return redirect("/home")
 
