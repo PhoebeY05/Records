@@ -6,14 +6,34 @@ from datetime import date, datetime, timedelta
 from html import unescape
 from html.parser import HTMLParser
 import io
+import importlib
 import random
 import re
 import os
+import time
 import subprocess
 import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
+import json
+import requests
+from bs4 import BeautifulSoup
+from urllib.parse import quote_plus, parse_qs, unquote, urlparse
 
+try:
+    from sentence_transformers import SentenceTransformer, util
+except Exception:
+    SentenceTransformer = None
+    util = None
+
+try:
+    sync_playwright = importlib.import_module("playwright.sync_api").sync_playwright
+except Exception:
+    sync_playwright = None
+
+
+_SEARCH_RESULTS_CACHE = {}
+_genre_model = None
 
 app = Flask(__name__)
 BOOK_PAGES = {"completed", "unfinished", "tbr"}
@@ -146,6 +166,16 @@ def query_books_with_filters(category, user_id, status_filter=None, existence_fi
 
 def sanitize_import_text(text):
     return text.replace("\x00", "")
+
+
+def _load_genre_model():
+    global _genre_model
+    if _genre_model is not None:
+        return _genre_model
+    if SentenceTransformer is None:
+        return None
+    _genre_model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+    return _genre_model
 
 
 class ImportHTMLParser(HTMLParser):
@@ -417,6 +447,698 @@ def extract_import_text(upload):
         docx_text = extract_docx_text(file_bytes)
         if docx_text is not None:
             return docx_text
+
+
+# --- Genre inference (search first result + page metadata parsing) ---
+
+
+def _google_search_results(query, max_results=4):
+    api_key = os.environ.get("GOOGLE_SEARCH_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+    cx = os.environ.get("GOOGLE_SEARCH_CX") or os.environ.get("GOOGLE_CX")
+    if api_key and cx:
+        try:
+            response = requests.get(
+                "https://www.googleapis.com/customsearch/v1",
+                params={"key": api_key, "cx": cx, "q": query, "num": max_results},
+                timeout=8,
+            )
+            response.raise_for_status()
+            data = response.json()
+            results = []
+            for item in (data.get("items") or [])[:max_results]:
+                href = _normalize_search_href(item.get("link") or "")
+                results.append(
+                    {
+                        "title": item.get("title") or "",
+                        "snippet": item.get("snippet") or "",
+                        "href": href,
+                    }
+                )
+            return _rank_search_results(query, results, max_results=max_results)
+        except Exception:
+            return []
+
+    return _brave_search_results(query, max_results=max_results)
+
+
+def _brave_search_results(query, max_results=4):
+    cache_key = query.casefold().strip()
+    cached = _SEARCH_RESULTS_CACHE.get(cache_key)
+    if cached is not None:
+        return cached[:max_results]
+
+    try:
+        headers = {"User-Agent": "Mozilla/5.0"}
+        query_variants = [f"{query} 晋江", query, f"{query} 小说"]
+        for search_query in dict.fromkeys(query_variants):
+            q = quote_plus(search_query)
+            url = f"https://search.brave.com/search?q={q}&source=web"
+            response = None
+            for attempt in range(3):
+                response = requests.get(url, headers=headers, timeout=12)
+                if response.status_code != 429:
+                    break
+                if attempt < 2:
+                    time.sleep(1 + attempt)
+            if response is None or response.status_code == 429:
+                continue
+            response.raise_for_status()
+            soup = BeautifulSoup(response.text, "html.parser")
+
+            results = []
+            seen_urls = set()
+            for anchor in soup.select("a[href]"):
+                href = anchor.get("href") or ""
+                text = anchor.get_text(" ", strip=True)
+                if not href or not text:
+                    continue
+                if href.startswith("javascript:"):
+                    continue
+                if href.startswith("/search") or href.startswith("/ask") or href.startswith("/images"):
+                    continue
+                if href.startswith("https://search.brave.com/"):
+                    continue
+                if href in seen_urls:
+                    continue
+                seen_urls.add(href)
+                results.append({"title": text, "snippet": "", "href": href})
+                if len(results) >= max_results:
+                    break
+
+            ranked = _rank_search_results(query, results, max_results=max_results)
+            if ranked:
+                _SEARCH_RESULTS_CACHE[cache_key] = ranked
+                return ranked
+    except Exception:
+        if cached is not None:
+            return cached
+        return []
+
+    if cached is not None:
+        return cached[:max_results]
+    return []
+
+
+def _bing_search_results(query, max_results=4):
+    try:
+        q = quote_plus(query)
+        url = f"https://www.bing.com/search?q={q}"
+        headers = {"User-Agent": "Mozilla/5.0"}
+        response = requests.get(url, headers=headers, timeout=8)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, "html.parser")
+        results = []
+        for block in soup.select("li.b_algo"):
+            link = block.select_one("h2 a")
+            if not link:
+                continue
+            title = link.get_text(" ", strip=True)
+            href = link.get("href") or ""
+            snippet_el = block.select_one("p")
+            snippet = snippet_el.get_text(" ", strip=True) if snippet_el else ""
+            results.append({"title": title, "snippet": snippet, "href": href})
+            if len(results) >= max_results:
+                break
+        return _rank_search_results(query, results, max_results=max_results)
+    except Exception:
+        return []
+
+
+def _baidu_search_results(query, max_results=4):
+    """Render Baidu via headless Chrome and resolve its /link?url= redirects.
+
+    Why headless: a plain requests call to baidu.com/s returns an anti-bot
+    stub page (~1.5 KB) with no result list.
+    """
+    if sync_playwright is None:
+        return []
+
+    cache_key = ("baidu", query.casefold().strip())
+    cached = _SEARCH_RESULTS_CACHE.get(cache_key)
+    if cached is not None:
+        return cached[:max_results]
+
+    chrome_path = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    raw_items = []
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(
+                headless=True,
+                executable_path=chrome_path if os.path.exists(chrome_path) else None,
+            )
+            try:
+                page = browser.new_page(
+                    user_agent=(
+                        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/120.0.0.0 Safari/537.36"
+                    ),
+                    locale="zh-CN",
+                )
+                page.goto(
+                    f"https://www.baidu.com/s?wd={quote_plus(query)}",
+                    wait_until="domcontentloaded",
+                    timeout=20000,
+                )
+                try:
+                    page.wait_for_selector("#content_left", timeout=8000)
+                except Exception:
+                    pass
+                page.wait_for_timeout(1500)
+                raw_items = page.evaluate(
+                    """() => {
+                        const root = document.querySelector('#content_left') || document.body;
+                        const items = Array.from(root.querySelectorAll('div.result, div.c-container'));
+                        return items.map(item => {
+                            const a = item.querySelector('h3 a') || item.querySelector('a');
+                            if (!a) return null;
+                            return {
+                                title: (a.innerText || '').trim(),
+                                href: a.href || '',
+                                snippet: (item.innerText || '').trim().slice(0, 240),
+                            };
+                        }).filter(Boolean);
+                    }"""
+                )
+            finally:
+                browser.close()
+    except Exception:
+        return []
+
+    resolved = []
+    seen = set()
+    for item in raw_items:
+        href = item.get("href") or ""
+        if "baidu.com/link?" not in href:
+            continue
+        real = _resolve_baidu_link(href)
+        if not real or real in seen:
+            continue
+        seen.add(real)
+        resolved.append(
+            {
+                "title": item.get("title") or "",
+                "snippet": item.get("snippet") or "",
+                "href": real,
+            }
+        )
+        if len(resolved) >= max_results * 2:
+            break
+
+    ranked = _rank_search_results(query, resolved, max_results=max_results)
+    _SEARCH_RESULTS_CACHE[cache_key] = ranked
+    return ranked
+
+
+def _resolve_baidu_link(href):
+    try:
+        response = requests.head(
+            href,
+            allow_redirects=False,
+            timeout=6,
+            headers={"User-Agent": "Mozilla/5.0"},
+        )
+        location = response.headers.get("Location")
+        if location:
+            return location
+    except Exception:
+        pass
+    return href
+
+
+def _normalize_search_href(href):
+    if not href:
+        return ""
+    parsed = urlparse(href)
+    if "google.com" in parsed.netloc and parsed.path == "/url":
+        params = parse_qs(parsed.query)
+        for key in ("q", "url", "u"):
+            values = params.get(key)
+            if values and values[0]:
+                return unquote(values[0])
+    return href
+
+
+def _result_relevance_score(query, title):
+    query_text = sanitize_import_text(query).casefold()
+    title_text = sanitize_import_text(title).casefold()
+    if not query_text or not title_text:
+        return 0.0
+
+    query_tokens = set(re.findall(r"[\w\u4e00-\u9fff]+", query_text))
+    title_tokens = set(re.findall(r"[\w\u4e00-\u9fff]+", title_text))
+    token_score = 0.0
+    if query_tokens:
+        token_score = len(query_tokens & title_tokens) / len(query_tokens)
+
+    query_chars = {char for char in query_text if not char.isspace()}
+    title_chars = {char for char in title_text if not char.isspace()}
+    char_score = 0.0
+    if query_chars:
+        char_score = len(query_chars & title_chars) / len(query_chars)
+
+    return max(token_score, char_score)
+
+
+def _rank_search_results(query, results, max_results=4):
+    ranked = []
+    for index, result in enumerate(results):
+        href = result.get("href") or ""
+        title = result.get("title") or ""
+        if not href:
+            continue
+        if not href.startswith("http"):
+            continue
+        parsed = urlparse(href)
+        if "google.com" in parsed.netloc:
+            continue
+        score = _result_relevance_score(query, title)
+        if score <= 0:
+            continue
+        ranked.append((score, index, result))
+
+    ranked.sort(key=lambda item: (-item[0], item[1]))
+    return [item[2] for item in ranked[:max_results]]
+
+
+def _clean_genre_phrase(phrase):
+    cleaned = sanitize_import_text(unescape(phrase)).strip()
+    cleaned = re.sub(r"^[\s\-–—:;,.\"'()\[\]{}]+|[\s\-–—:;,.\"'()\[\]{}]+$", "", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    if not cleaned:
+        return ""
+    if len(cleaned) > 80:
+        return ""
+    if len(cleaned.split()) > 4:
+        return ""
+    if not re.search(r"\w", cleaned, flags=re.UNICODE):
+        return ""
+    return cleaned[:1].upper() + cleaned[1:]
+
+
+def _normalize_match_text(text):
+    return re.sub(r"[\s\W_]+", "", sanitize_import_text(unescape(text)).casefold())
+
+
+def _extract_ai_genre_candidates(page_text, title, top_k=3):
+    model = _load_genre_model()
+    if model is None or util is None or not page_text:
+        return []
+
+    lines = []
+    for raw_line in re.split(r"[\n\r]+", page_text):
+        line = sanitize_import_text(unescape(raw_line)).strip()
+        if not line:
+            continue
+        for chunk in re.split(r"[。！？!?；;]+", line):
+            chunk = re.sub(r"\s+", " ", chunk).strip()
+            if not chunk:
+                continue
+            lines.append(chunk)
+
+    if not lines:
+        return []
+
+    query_text = "book genre tag trope category"
+    query_embedding = model.encode(query_text, convert_to_tensor=True)
+    line_embeddings = model.encode(lines, convert_to_tensor=True)
+    line_scores = util.cos_sim(query_embedding, line_embeddings)[0].cpu().numpy()
+
+    ranked_lines = sorted(
+        enumerate(lines),
+        key=lambda item: float(line_scores[item[0]]),
+        reverse=True,
+    )[:6]
+
+    candidate_chunks = []
+    chunk_line_scores = {}
+    seen = set()
+    title_key = _normalize_match_text(title)
+
+    for line_index, line in ranked_lines:
+        line_parts = [part.strip() for part in re.split(r"[┃|,，、；;]+", line) if part.strip()]
+        if not line_parts:
+            line_parts = [line]
+
+        for part in line_parts:
+            if re.search(r"[:：]", part):
+                prefix, suffix = re.split(r"[:：]", part, maxsplit=1)
+                prefix_key = _normalize_match_text(prefix)
+                if prefix_key in {"title", "description", "keywords", "genre", "ogtitle", "ogdescription", "bookauthor", "articletag"}:
+                    part = suffix.strip()
+            cleaned = _clean_genre_phrase(part)
+            if not cleaned:
+                continue
+            chunk_key = _normalize_match_text(cleaned)
+            if not chunk_key or chunk_key in seen:
+                continue
+            if title_key and (title_key in chunk_key or chunk_key in title_key):
+                continue
+            seen.add(chunk_key)
+            candidate_chunks.append(cleaned)
+            chunk_line_scores[cleaned] = max(chunk_line_scores.get(cleaned, 0.0), float(line_scores[line_index]))
+
+    if not candidate_chunks:
+        return []
+
+    chunk_embeddings = model.encode(candidate_chunks, convert_to_tensor=True)
+    chunk_scores = util.cos_sim(query_embedding, chunk_embeddings)[0].cpu().numpy()
+
+    ranked = []
+    for idx, chunk in enumerate(candidate_chunks):
+        score = float(chunk_scores[idx]) + (chunk_line_scores.get(chunk, 0.0) * 0.35)
+        if " " in chunk:
+            score += 0.12
+        if re.search(r"[:：]", chunk):
+            score -= 0.25
+        if re.search(r"\d", chunk):
+            score -= 0.15
+        ranked.append((chunk, score))
+
+    ranked.sort(key=lambda item: (-item[1], item[0]))
+
+    results = []
+    results_seen = set()
+    for chunk, score in ranked:
+        pieces = [piece for piece in re.split(r"[\s,，、/|·]+", chunk) if piece]
+        for piece in pieces:
+            cleaned = _clean_genre_phrase(piece)
+            if not cleaned:
+                continue
+            piece_key = _normalize_match_text(cleaned)
+            if not piece_key or piece_key in results_seen:
+                continue
+            if title_key and (title_key in piece_key or piece_key in title_key):
+                continue
+            results_seen.add(piece_key)
+            results.append((cleaned, score))
+            if len(results) >= top_k:
+                return results
+
+    return results[:top_k]
+
+
+def _extract_structured_genres(text):
+    """Extract candidate genres from generic structured label/value rows."""
+    if not text:
+        return []
+
+    matches = []
+    source_text = sanitize_import_text(unescape(text))
+    seen = set()
+    pending_label = None
+
+    for raw_line in re.split(r"[\n\r]+", source_text):
+        line = raw_line.strip()
+        if not line or len(line) > 200:
+            pending_label = None
+            continue
+        if "http://" in line.lower() or "https://" in line.lower() or "www." in line.lower():
+            pending_label = None
+            continue
+
+        if pending_label:
+            value = line
+            pending_label = None
+        else:
+            value = ""
+            if "：" in line:
+                parts = line.split("：", 1)
+            elif ":" in line:
+                parts = line.split(":", 1)
+            else:
+                continue
+
+            if len(parts) != 2:
+                continue
+
+            label = parts[0].strip()
+            value = parts[1].strip()
+            if not label:
+                continue
+            if not value:
+                pending_label = label
+                continue
+
+        if "：" in line:
+            pass
+
+        if not re.search(r"[-－—–/|,]", value):
+            continue
+
+        chunks = [c.strip() for c in re.split(r"[-－—–/|,]+", value) if c.strip()]
+        if len(chunks) < 2:
+            continue
+        if any(len(c) > 20 for c in chunks):
+            continue
+        if any(re.search(r"[《》【】「」『』〈〉]", c) for c in chunks):
+            continue
+        lengths = [len(c) for c in chunks]
+        if max(lengths) / max(1, min(lengths)) > 4:
+            continue
+
+        for part in chunks:
+            subparts = [part]
+            if re.search(r"\s+", part):
+                subparts = [piece for piece in re.split(r"\s+", part) if piece]
+
+            for subpart in subparts:
+                cleaned = _clean_genre_phrase(subpart)
+                if cleaned and not re.search(r"\d", cleaned) and cleaned.casefold() not in seen:
+                    seen.add(cleaned.casefold())
+                    matches.append(cleaned)
+    return matches
+
+
+def _openlibrary_subjects(title):
+    """Query Open Library for subjects (free API)."""
+    try:
+        q = quote_plus(title)
+        url = f"https://openlibrary.org/search.json?q={q}&limit=1"
+        r = requests.get(url, timeout=8)
+        r.raise_for_status()
+        data = r.json()
+        docs = data.get("docs") or []
+        if not docs:
+            return []
+        subjects = docs[0].get("subject") or []
+        return subjects
+    except Exception:
+        return []
+
+
+def _duckduckgo_search_links(query, max_links=3):
+    """Use DuckDuckGo HTML search (free) to collect candidate links."""
+    try:
+        q = quote_plus(query)
+        url = f"https://html.duckduckgo.com/html/?q={q}"
+        headers = {"User-Agent": "reading-records-bot/1.0"}
+        r = requests.get(url, headers=headers, timeout=8)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.text, "html.parser")
+        links = []
+        for a in soup.select("a.result__a"):
+            href = a.get("href")
+            if href:
+                links.append(href)
+            if len(links) >= max_links:
+                break
+        return links
+    except Exception:
+        return []
+
+
+def _fetch_page_text(url, _depth=0):
+    try:
+        headers = {"User-Agent": "reading-records-bot/1.0"}
+        r = requests.get(url, headers=headers, timeout=8)
+        r.raise_for_status()
+        soup = BeautifulSoup(r.content, "html.parser")
+        # Follow <link rel="canonical"> once per call chain. Mobile/AMP/etc.
+        # pages frequently advertise the canonical (usually richer) URL here.
+        if _depth < 1:
+            canonical = soup.find("link", attrs={"rel": "canonical"})
+            canonical_href = canonical.get("href") if canonical else None
+            if canonical_href and canonical_href.startswith("http") and canonical_href != url:
+                return _fetch_page_text(canonical_href, _depth=_depth + 1)
+        # Generic metadata and visible text from the page itself.
+        texts = []
+        for tag in soup.select('script[type="application/ld+json"]'):
+            try:
+                j = json.loads(tag.string or "{}")
+                if isinstance(j, dict):
+                    texts.append(json.dumps(j))
+            except Exception:
+                continue
+        for meta_name in ("description", "keywords", "news_keywords"):
+            for meta in soup.find_all("meta", attrs={"name": meta_name}):
+                content = meta.get("content")
+                if content:
+                    texts.append(f"{meta_name}: {content}")
+        for meta_property in ("og:title", "og:description", "article:tag", "genre", "book:author"):
+            for meta in soup.find_all("meta", attrs={"property": meta_property}):
+                content = meta.get("content")
+                if content:
+                    texts.append(f"{meta_property}: {content}")
+        desc = soup.find("meta", attrs={"name": "description"})
+        if desc and desc.get("content"):
+            texts.append(desc.get("content"))
+        og = soup.find("meta", property="og:description")
+        if og and og.get("content"):
+            texts.append(og.get("content"))
+        for tag in soup.select("a[rel~=tag], a.tag, li.tag, span.tag, .tag, .tags a, .tags span"):
+            tag_text = tag.get_text(" ", strip=True)
+            if tag_text:
+                texts.append(f"tag: {tag_text}")
+        # visible paragraph text (trim)
+        body = " ".join(p.get_text(separator=" ", strip=True) for p in soup.find_all("p")[:10])
+        if body:
+            texts.append(body[:4000])
+        text = "\n".join(texts)
+        if not _extract_structured_genres(text):
+            rendered_text = _fetch_rendered_page_text(url)
+            if rendered_text and rendered_text not in text:
+                text = f"{text}\n{rendered_text}" if text else rendered_text
+        return text
+    except Exception:
+        rendered_text = _fetch_rendered_page_text(url)
+        return rendered_text or ""
+
+
+
+def _fetch_rendered_page_text(url):
+    if sync_playwright is None:
+        return ""
+
+    chrome_path = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(
+                headless=True,
+                executable_path=chrome_path if os.path.exists(chrome_path) else None,
+            )
+            try:
+                page = browser.new_page(
+                    user_agent=(
+                        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/120.0.0.0 Safari/537.36"
+                    ),
+                )
+                response = page.goto(url, wait_until="networkidle", timeout=15000)
+                if response is not None and response.status >= 400:
+                    return ""
+                body_text = page.locator("body").inner_text(timeout=5000)
+                return sanitize_import_text(body_text)
+            finally:
+                browser.close()
+    except Exception:
+        return ""
+
+
+AI_GENRE_SCORE_FLOOR = 0.15
+MAX_PAGES_TO_FETCH = 6
+
+
+def infer_genres(title, summary=None, top_k=3):
+    """Infer genres by opening search results and reading page metadata/content.
+
+    Two passes:
+      1. Try every candidate page for explicit structured metadata rows
+         (e.g. `文章类型：原创-言情-...`). These are real tags.
+      2. Only if pass 1 yields nothing, fall back to embedding-similarity
+         ranking of page phrases, gated by a score floor.
+
+    Returns list of (genre, score, source).
+    """
+    query = title if not summary else f"{title} {summary}"
+
+    seen_urls = set()
+    all_results = []
+    for fetcher in (_google_search_results, _bing_search_results, _baidu_search_results):
+        try:
+            engine_results = fetcher(query, max_results=5) or []
+        except Exception:
+            engine_results = []
+        for result in engine_results:
+            href = result.get("href") or ""
+            if not href or href in seen_urls:
+                continue
+            seen_urls.add(href)
+            all_results.append(result)
+
+    if not all_results:
+        return []
+
+    all_results = all_results[:MAX_PAGES_TO_FETCH]
+    title_key = _normalize_match_text(title)
+
+    def _accept(genre, score, page_url, seen, ranked):
+        key = genre.casefold()
+        if key in seen:
+            return False
+        genre_key = _normalize_match_text(genre)
+        if not genre_key:
+            return False
+        if title_key and (title_key in genre_key or genre_key in title_key):
+            return False
+        seen.add(key)
+        ranked.append((genre, float(score), page_url))
+        return True
+
+    # Pass 1: collect structured rows across all pages.
+    seen = set()
+    ranked = []
+    ai_pages = []
+    for result in all_results:
+        page_url = result.get("href") or ""
+        page_text = _fetch_page_text(page_url)
+        if not page_text:
+            continue
+        structured = _extract_structured_genres(page_text)
+        if not structured:
+            ai_pages.append((page_text, page_url))
+            continue
+        # Short-circuit: one page yielding ≥top_k structured rows is a complete,
+        # trusted source — return immediately without fetching remaining URLs.
+        if len(structured) >= top_k:
+            page_ranked = []
+            page_seen = set()
+            for genre in structured:
+                _accept(genre, 1.0, page_url, page_seen, page_ranked)
+                if len(page_ranked) >= top_k:
+                    return page_ranked
+        # Either <top_k, or dedup against title dropped below top_k — accumulate
+        # across pages.
+        for genre in structured:
+            _accept(genre, 1.0, page_url, seen, ranked)
+            if len(ranked) >= top_k:
+                return ranked
+
+    if ranked:
+        return ranked
+
+    # Pass 2: fall back to AI ranking on pages with no structured rows.
+    for page_text, page_url in ai_pages:
+        ai_ranked = _extract_ai_genre_candidates(page_text, title, top_k=top_k)
+        for genre, score in ai_ranked:
+            if score < AI_GENRE_SCORE_FLOOR:
+                continue
+            _accept(genre, score, page_url, seen, ranked)
+            if len(ranked) >= top_k:
+                return ranked
+    return ranked
+
+
+@app.route("/api/infer_genres", methods=["POST"])
+def api_infer_genres():
+    data = request.get_json() or {}
+    title = (data.get("title") or "").strip()
+    summary = (data.get("summary") or "").strip()
+    if not title:
+        return {"error": "missing title"}, 400
+    out = infer_genres(title, summary)
+    return {"title": title, "suggestions": [{"genre": g, "score": s, "source": src} for g, s, src in out]}
 
     if file_name.endswith((".pages", ".rtf", ".doc", ".docx", ".odt", ".html", ".htm", ".webarchive")):
         rich_text = extract_html_text(file_bytes)
