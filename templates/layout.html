@@ -27,42 +27,32 @@
         })
     </script>
   </head>
-  <nav class="navbar navbar-expand-lg navbar-light bg">
+  <nav class="navbar navbar-expand-lg navbar-dark bg main-nav sticky-top">
       <div class="container-fluid">
-        <img src="../static/icon.png" height=40, width="40" class="me-3"/>
-        <a class="navbar-brand georgia white-text" href="/home">Home</a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+        <a class="navbar-brand main-nav-brand georgia" href="/home">
+          <img src="../static/icon.png" height="34" width="34" alt="">
+          <span class="main-nav-brand-text">Reading Records</span>
+        </a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
           <span class="navbar-toggler-icon"></span>
-      </button>
-      <div class="collapse navbar-collapse smaller" id="navbarSupportedContent">
-        <ul class="navbar-nav mr-auto">
-          <li class="nav-item active">
-            <a class="nav-link georgia white-text" href="/tbr">To Be Read</a>
-          </li>
-          <li class="nav-item active">
-            <a class="nav-link georgia white-text" href="/completed">Completed</a>
-          </li>
-          <li class="nav-item active">
-            <a class="nav-link georgia white-text" href="/unfinished">Unfinished</a>
-          </li>
-          <li class="nav-item active">
-            <a class="nav-link georgia white-text" href="/add">Add Book</a>
-          </li>
-          <li class="nav-item active">
-            <a class="nav-link georgia white-text" href="/import">Import</a>
-          </li>
-        </ul>
-        <div class = "navbar-nav mx-auto header ">
-          <img src="../static/book.png" height=30, width="30" class="mt-2 me-3"/>
-          <h1 class="header">Reading Records</h1> 
+        </button>
+        <div class="collapse navbar-collapse" id="mainNav">
+          <ul class="navbar-nav main-nav-links me-auto mb-2 mb-lg-0">
+            <li class="nav-item"><a class="nav-link georgia {% if request.path == '/home' %}active{% endif %}" href="/home">Home</a></li>
+            <li class="nav-item"><a class="nav-link georgia {% if request.path == '/tbr' %}active{% endif %}" href="/tbr">To Be Read</a></li>
+            <li class="nav-item"><a class="nav-link georgia {% if request.path == '/completed' %}active{% endif %}" href="/completed">Completed</a></li>
+            <li class="nav-item"><a class="nav-link georgia {% if request.path == '/unfinished' %}active{% endif %}" href="/unfinished">Unfinished</a></li>
+            <li class="nav-item"><a class="nav-link georgia {% if request.path == '/add' %}active{% endif %}" href="/add">Add</a></li>
+            <li class="nav-item"><a class="nav-link georgia {% if request.path == '/import' %}active{% endif %}" href="/import">Import</a></li>
+          </ul>
+          <form class="main-nav-search d-flex mb-2 mb-lg-0 me-lg-2" action="/search" method="post" role="search">
+            <input class="form-control georgia" type="search" placeholder="Search books..." name="search" aria-label="Search">
+            <button class="btn btn-outline-light georgia ms-2" type="submit">Search</button>
+          </form>
+          <form action="/logout" method="get" class="m-0">
+            <button class="btn btn-outline-light georgia" type="submit">Log Out</button>
+          </form>
         </div>
-        <form class="d-flex" action="/search" method="post">
-          <input class="form-control me-2 georgia thinner" type="search" placeholder="Search" name="search" aria-label="Search">
-          <button class="btn btn-outline-success button georgia white-text" type="submit">Search</button>
-        </form>
-        <form class = "nav-link" action="/logout" method ="get">
-          <button class="btn my-2 my-sm-0 georgia white-text" type="submit">Log Out</button>
-        </form>
       </div>
     </nav>
   <body class="platinum">

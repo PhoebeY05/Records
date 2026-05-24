@@ -115,16 +115,18 @@
                         <tr class="collapse" id="{{collapse_id}}">
                             <td colspan="6" class="bg-transparent border-0 pt-0">
                                 <div class="book-info-card">
-                                    <dl class="book-info-meta">
-                                        <div class="book-info-pair"><dt>Date added</dt><dd>{{book.date}}</dd></div>
-                                        <div class="book-info-pair"><dt>Genres</dt><dd>{{book.genres or "—"}}</dd></div>
-                                        <div class="book-info-pair"><dt>Series</dt><dd>{{book.series or "—"}}</dd></div>
-                                        {% if book.reread is defined %}<div class="book-info-pair"><dt>Rereads</dt><dd>{{book.reread}} time(s)</dd></div>{% endif %}
-                                        {% if book.days is defined %}<div class="book-info-pair"><dt>Days to finish</dt><dd>{{book.days}}</dd></div>{% endif %}
-                                    </dl>
-                                    <div class="book-info-notes">
-                                        <p class="book-info-notes-label">Notes</p>
-                                        <p class="book-info-notes-text">{{book.notes or "—"}}</p>
+                                    <div class="book-info-layout">
+                                        <dl class="book-info-meta">
+                                            <div class="book-info-pair"><dt>Date added</dt><dd>{{book.date}}</dd></div>
+                                            <div class="book-info-pair"><dt>Genres</dt><dd>{{book.genres or "—"}}</dd></div>
+                                            <div class="book-info-pair"><dt>Series</dt><dd>{{book.series or "—"}}</dd></div>
+                                            {% if book.reread is defined %}<div class="book-info-pair"><dt>Rereads</dt><dd>{{book.reread}} time(s)</dd></div>{% endif %}
+                                            {% if book.days is defined %}<div class="book-info-pair"><dt>Days to finish</dt><dd>{{book.days}}</dd></div>{% endif %}
+                                        </dl>
+                                        <div class="book-info-notes">
+                                            <p class="book-info-notes-label">Notes</p>
+                                            <p class="book-info-notes-text">{{book.notes or "—"}}</p>
+                                        </div>
                                     </div>
                                 </div>
                             </td>
