@@ -141,6 +141,14 @@ a:hover
     background-color: #6B0F1A;
     color:white !important;
 }
+.red:hover,
+.red:focus,
+.red:active
+{
+    background-color: #560C15 !important;
+    color: white !important;
+    border-color: #560C15 !important;
+}
 .platinum
 {
     background-color: #DCE0D9;
