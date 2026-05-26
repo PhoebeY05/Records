@@ -1558,6 +1558,11 @@ def strip_reread_phrase(text):
     return cleaned.strip(" ;,-")
 
 
+def should_mark_left_extras(note_parts):
+    notes_text = " ".join(part for part in note_parts if part)
+    return "番外" in notes_text and "看不到" not in notes_text
+
+
 def find_existing_book_row(table, user_id, title, columns):
     target_key = normalize_book_key(title)
     rows = db.execute(f"SELECT {columns} FROM {table} WHERE user_id = ?", user_id)
@@ -1891,10 +1896,11 @@ def undo_import_actions(user_id, actions):
         elif action_type == "update_completed":
             previous = action.get("previous", {})
             db.execute(
-                "UPDATE completed SET reread = ?, notes = ?, favorite = ? WHERE id = ? AND user_id = ?",
+                "UPDATE completed SET reread = ?, notes = ?, favorite = ?, status = ? WHERE id = ? AND user_id = ?",
                 previous.get("reread", 0),
                 previous.get("notes"),
                 previous.get("favorite", 0),
+                previous.get("status", "Finished"),
                 row_id,
                 user_id,
             )
@@ -1965,6 +1971,8 @@ def import_completed_books(lines, user_id):
             entry["notes"].extend(pending_notes)
             pending_notes = []
 
+        entry["status"] = "Left Extras" if should_mark_left_extras(entry["notes"]) else "Finished"
+
         exact_key = (normalize_book_key(entry["book"]), entry["date"].isoformat() if entry["date"] else None)
         if exact_key in seen_entries:
             skipped += 1
@@ -1980,18 +1988,25 @@ def import_completed_books(lines, user_id):
             existing["notes"].extend(entry["notes"])
             existing["reread"] += 1
             existing["favorite"] = 1 if (existing.get("favorite") or entry.get("favorite")) else 0
+            if entry["status"] == "Left Extras":
+                existing["status"] = "Left Extras"
+            elif "status" not in existing:
+                existing["status"] = "Finished"
             if not existing["series"] and entry["series"]:
                 existing["series"] = entry["series"]
         else:
             aggregated[key] = entry
 
     for entry in aggregated.values():
-        existing = find_existing_book_row("completed", user_id, entry["book"], "id, reread, notes, book, favorite")
+        existing = find_existing_book_row("completed", user_id, entry["book"], "id, reread, notes, book, favorite, status")
         entry_notes = merge_notes(entry["notes"])
 
         if existing:
             merged = merge_notes([existing[0]["notes"], entry_notes])
             new_favorite = 1 if (existing[0]["favorite"] or entry.get("favorite")) else 0
+            new_status = existing[0]["status"]
+            if entry.get("status") == "Left Extras":
+                new_status = "Left Extras"
             undo_actions.append(
                 {
                     "action": "update_completed",
@@ -2001,14 +2016,16 @@ def import_completed_books(lines, user_id):
                         "reread": existing[0]["reread"],
                         "notes": existing[0]["notes"],
                         "favorite": existing[0]["favorite"],
+                        "status": existing[0]["status"],
                     },
                 }
             )
             db.execute(
-                "UPDATE completed SET reread = ?, notes = ?, favorite = ? WHERE id = ? AND user_id = ?",
+                "UPDATE completed SET reread = ?, notes = ?, favorite = ?, status = ? WHERE id = ? AND user_id = ?",
                 existing[0]["reread"] + 1,
                 merged,
                 new_favorite,
+                new_status,
                 existing[0]["id"],
                 user_id,
             )
@@ -2033,7 +2050,7 @@ def import_completed_books(lines, user_id):
             days,
             entry_notes,
             entry["reread"],
-            "Finished",
+            entry.get("status", "Finished"),
             entry["series"],
             entry.get("favorite", 0),
         )
