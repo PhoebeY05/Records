@@ -1,4 +1,4 @@
-from flask import Flask, Response, redirect, session, render_template, request, flash, url_for
+from flask import Flask, Response, jsonify, redirect, session, render_template, request, flash, url_for
 from flask_session import Session
 from cs50 import SQL
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -2582,6 +2582,7 @@ def tbr():
                 switch("tbr", "unfinished", book_id)
             return redirect("/tbr")
         if "clear" in request.form:
+            session.setdefault("filters", {}).pop("tbr", None)
             return redirect("/tbr")
     return render_category_page("tbr", "tbr.html")
 
@@ -2595,6 +2596,7 @@ def completed():
             db.execute("UPDATE completed SET reread = ? WHERE id = ? AND user_id = ?", times + 1, id, session["user_id"])
             return redirect("/completed")
         if "clear" in request.form:
+            session.setdefault("filters", {}).pop("completed", None)
             return redirect("/completed")
     return render_category_page("completed", "completed.html")
 
@@ -2613,6 +2615,7 @@ def unfinished():
                 switch("unfinished", "tbr", id)
             return redirect("/unfinished")
         if "clear" in request.form:
+            session.setdefault("filters", {}).pop("unfinished", None)
             return redirect("/unfinished")
     return render_category_page("unfinished", "unfinished.html")
 
@@ -2630,6 +2633,24 @@ def book_detail_api(category, book_id):
     if not rows:
         return {"error": "not found"}, 404
     book = rows[0]
+    payload = {
+        "id": book["id"],
+        "category": category,
+        "book": book["book"],
+        "status": book.get("status") or "",
+        "date": str(book.get("date") or ""),
+        "genres": book.get("genres") or "",
+        "notes": book.get("notes") or "",
+        "series": book.get("series") or "",
+    }
+    if "reread" in book:
+        payload["reread"] = book["reread"]
+    if "days" in book:
+        payload["days"] = book["days"]
+    return payload
+
+
+def serialize_book_row(category, book):
     payload = {
         "id": book["id"],
         "category": category,
@@ -2679,13 +2700,18 @@ def toggle_favorite(category, book_id):
 def update_book(category, book_id):
     if not session_user_exists():
         session.clear()
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify({"error": "Your session is no longer valid. Please log in again."}), 401
         flash("Your session is no longer valid. Please log in again.")
         return redirect("/")
 
     if category not in BOOK_PAGES:
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return jsonify({"error": "Invalid category."}), 400
         flash("Invalid category.")
         return redirect("/home")
 
+    expects_json = request.headers.get("X-Requested-With") == "XMLHttpRequest"
     book_name = (request.form.get("book") or "").strip()
     status = (request.form.get("status") or "").strip()
     genres = (request.form.get("genres") or "").strip()
@@ -2697,13 +2723,19 @@ def update_book(category, book_id):
         try:
             reread = max(int(reread_raw), 0)
         except ValueError:
+            if expects_json:
+                return jsonify({"error": "Rereads must be a whole number."}), 400
             flash("Rereads must be a whole number.")
             return redirect(f"/{category}")
     elif category == "completed" and reread_raw == "":
+        if expects_json:
+            return jsonify({"error": "Rereads cannot be blank."}), 400
         flash("Rereads cannot be blank.")
         return redirect(f"/{category}")
 
     if not book_name:
+        if expects_json:
+            return jsonify({"error": "Book name cannot be empty."}), 400
         flash("Book name cannot be empty.")
         return redirect(f"/{category}")
 
@@ -2712,6 +2744,8 @@ def update_book(category, book_id):
         book_id, session["user_id"],
     )
     if not existing:
+        if expects_json:
+            return jsonify({"error": "That book no longer exists."}), 404
         flash("That book no longer exists.")
         return redirect(f"/{category}")
 
@@ -2733,6 +2767,14 @@ def update_book(category, book_id):
         "UPDATE combined SET book = ? WHERE id = ? AND user_id = ? AND page = ?",
         book_name, book_id, session["user_id"], category,
     )
+
+    updated = db.execute(
+        f"SELECT * FROM {category} WHERE id = ? AND user_id = ? LIMIT 1",
+        book_id, session["user_id"],
+    )[0]
+
+    if expects_json:
+        return jsonify(serialize_book_row(category, updated))
 
     flash("Book updated.")
     return redirect(f"/{category}")

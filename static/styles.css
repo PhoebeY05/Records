@@ -933,6 +933,18 @@ a:hover
     padding-right: 1.5rem;
 }
 
+.book-list-filters .form-select.filter-active {
+    border-color: #6B0F1A;
+    background-color: rgba(107, 15, 26, 0.08);
+    color: #6B0F1A;
+    font-weight: 600;
+    box-shadow: 0 0 0 1px rgba(107, 15, 26, 0.35);
+}
+
+.book-list-filters .form-select.filter-active:focus {
+    box-shadow: 0 0 0 0.2rem rgba(107, 15, 26, 0.25);
+}
+
 .series-filters .series-filter-input {
     min-height: 44px;
     border-radius: 25px;
@@ -1249,6 +1261,32 @@ a:hover
     justify-content: flex-end;
     gap: 0.5rem;
     margin-top: 0.4rem;
+}
+
+.book-save-status {
+    font-family: 'Georgia';
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: #6B0F1A;
+    opacity: 0;
+    transition: opacity 0.18s ease;
+    min-height: 1rem;
+}
+
+.book-save-status.is-visible {
+    opacity: 1;
+}
+
+.book-detail-save-status {
+    margin-right: auto;
+    align-self: center;
+    padding-right: 0.35rem;
+}
+
+.book-edit-feedback {
+    text-align: right;
+    margin-top: 0.15rem;
 }
 
 .book-info-layout {
@@ -3238,4 +3276,3 @@ a:hover
 .favorites-section-link:hover {
     text-decoration: underline;
 }
-

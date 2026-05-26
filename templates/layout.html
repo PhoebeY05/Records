@@ -165,6 +165,7 @@
                       </label>
                   </div>
                   <div class="modal-footer">
+                      <span class="book-save-status book-detail-save-status" aria-live="polite" hidden></span>
                       <button type="button" class="btn btn-outline-secondary book-detail-edit-toggle js-view-mode">✎ Edit</button>
                       <button type="button" class="btn btn-outline-secondary book-detail-edit-cancel js-edit-mode" hidden>Cancel</button>
                       <button type="submit" class="btn random-modal-primary js-edit-mode" hidden>Save</button>
@@ -181,12 +182,31 @@
               const form = modalEl.querySelector(".book-detail-form");
               const CATEGORY_LABELS = { completed: "Completed", unfinished: "Unfinished", tbr: "To Be Read" };
               let currentData = null;
+              let saveStatusTimer = null;
 
               function setEditMode(editing) {
                   modalEl.querySelectorAll(".js-view").forEach(function (el) { el.hidden = editing; });
                   modalEl.querySelectorAll(".js-edit").forEach(function (el) { el.hidden = !editing; });
                   modalEl.querySelectorAll(".js-view-mode").forEach(function (el) { el.hidden = editing; });
                   modalEl.querySelectorAll(".js-edit-mode").forEach(function (el) { el.hidden = !editing; });
+              }
+
+              function showSaveStatus(message) {
+                  const statusEl = modalEl.querySelector(".book-detail-save-status");
+                  if (!statusEl) return;
+                  if (saveStatusTimer) {
+                      clearTimeout(saveStatusTimer);
+                      saveStatusTimer = null;
+                  }
+                  statusEl.textContent = message || "Saved";
+                  statusEl.hidden = false;
+                  statusEl.classList.add("is-visible");
+                  saveStatusTimer = setTimeout(function () {
+                      statusEl.classList.remove("is-visible");
+                      statusEl.hidden = true;
+                      statusEl.textContent = "";
+                      saveStatusTimer = null;
+                  }, 1800);
               }
 
               function populate(data) {
@@ -263,6 +283,36 @@
               });
               modalEl.querySelector(".book-detail-edit-cancel").addEventListener("click", function () {
                   if (currentData) populate(currentData);
+              });
+
+              form.addEventListener("submit", async function (event) {
+                  event.preventDefault();
+                  const submitButton = form.querySelector('button[type="submit"]');
+                  if (submitButton) {
+                      submitButton.disabled = true;
+                      submitButton.dataset.originalLabel = submitButton.textContent;
+                      submitButton.textContent = "Saving…";
+                  }
+                  try {
+                      const response = await fetch(form.action, {
+                          method: "POST",
+                          headers: { "X-Requested-With": "XMLHttpRequest" },
+                          body: new FormData(form),
+                      });
+                      const data = await response.json();
+                      if (!response.ok) {
+                          throw new Error(data.error || "Save failed.");
+                      }
+                      populate(data);
+                      showSaveStatus("Saved");
+                  } catch (err) {
+                      window.alert(err.message || "Save failed.");
+                  } finally {
+                      if (submitButton) {
+                          submitButton.disabled = false;
+                          submitButton.textContent = submitButton.dataset.originalLabel || "Save";
+                      }
+                  }
               });
 
               const suggestBtn = modalEl.querySelector(".js-suggest-genres");

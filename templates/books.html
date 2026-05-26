@@ -69,16 +69,17 @@
         <form action="{{page}}" method="post" name="options" class="book-list-filters mb-3">
             <div class="row g-2 align-items-stretch">
                 <div class="col-12 col-md">
-                    <select class="form-select grey" name="filter" onchange="this.form.submit()">
-                        <option value="" {% if selected_existence == "" %}selected{% endif %}>Filter by existence of...</option>
+                    {% set existence_label = {'series': 'Series', 'notes': 'Notes', 'genres': 'Genres'}.get(selected_existence, '') %}
+                    <select class="form-select grey {% if selected_existence %}filter-active{% endif %}" name="filter" onchange="this.form.submit()" aria-label="Filter by existence of">
+                        <option value="">{% if existence_label %}Existence: {{ existence_label }}{% else %}Filter by existence of...{% endif %}</option>
                         <option value="series" {% if selected_existence == "series" %}selected{% endif %}>Series</option>
                         <option value="notes" {% if selected_existence == "notes" %}selected{% endif %}>Notes</option>
                         <option value="genres" {% if selected_existence == "genres" %}selected{% endif %}>Genres</option>
                     </select>
                 </div>
                 <div class="col-12 col-md">
-                    <select class="form-select grey" name="status_filter" onchange="this.form.submit()">
-                        <option value="">Filter by status...</option>
+                    <select class="form-select grey {% if selected_status %}filter-active{% endif %}" name="status_filter" onchange="this.form.submit()" aria-label="Filter by status">
+                        <option value="">{% if selected_status %}Status: {{ selected_status }}{% else %}Filter by status...{% endif %}</option>
                         {% for s in status_options %}
                             <option value="{{s}}" {% if selected_status == s %}selected{% endif %}>{{s}}</option>
                         {% endfor %}
@@ -86,8 +87,8 @@
                 </div>
                 {% if page == "/completed" %}
                 <div class="col-12 col-md">
-                    <select class="form-select grey" name="reread_filter" onchange="this.form.submit()">
-                        <option value="" {% if selected_reread == "" %}selected{% endif %}>Filter by rereads...</option>
+                    <select class="form-select grey {% if selected_reread %}filter-active{% endif %}" name="reread_filter" onchange="this.form.submit()" aria-label="Filter by rereads">
+                        <option value="">{% if selected_reread != "" %}Rereads: {{ selected_reread }}{% else %}Filter by rereads...{% endif %}</option>
                         {% for n in reread_options %}
                             <option value="{{n}}" {% if selected_reread == n|string %}selected{% endif %}>{{n}} reread{{ '' if n == 1 else 's' }}</option>
                         {% endfor %}
@@ -214,6 +215,7 @@
                                             <button type="button" class="btn btn-outline-secondary js-edit-cancel">Cancel</button>
                                             <button type="submit" class="btn random-modal-primary">Save</button>
                                         </div>
+                                        <div class="book-edit-feedback book-save-status" aria-live="polite" hidden></div>
                                     </form>
                                 </div>
                             </td>
@@ -291,6 +293,131 @@
                     card.querySelector(".js-edit").hidden = true;
                     const toggle = card.querySelector(".js-edit-toggle");
                     if (toggle) toggle.hidden = false;
+                });
+            });
+
+            function syncBookCard(card, data) {
+                if (!card || !data) return;
+                const infoRow = card.closest(".book-info-row");
+                const summaryRow = infoRow ? infoRow.previousElementSibling : null;
+                const feedbackEl = card.querySelector(".book-edit-feedback");
+
+                if (summaryRow) {
+                    const nameEl = summaryRow.querySelector(".book-name");
+                    if (nameEl) nameEl.textContent = data.book || "";
+                    summaryRow.dataset.bookTitle = data.book || "";
+
+                    const dateEl = summaryRow.querySelector(".book-date");
+                    if (dateEl) dateEl.textContent = data.date || "—";
+
+                    const statusBadge = summaryRow.querySelector(".book-status-badge");
+                    if (statusBadge) {
+                        if (data.status) {
+                            statusBadge.hidden = false;
+                            statusBadge.textContent = data.status;
+                        } else {
+                            statusBadge.hidden = true;
+                        }
+                    }
+                }
+
+                card.querySelectorAll(".book-info-pair").forEach(function (pair) {
+                    const dt = pair.querySelector("dt");
+                    const dd = pair.querySelector("dd");
+                    if (!dt || !dd) return;
+                    const label = (dt.textContent || "").trim();
+                    if (label === "Date added") {
+                        dd.textContent = data.date || "—";
+                    } else if (label === "Status") {
+                        dd.textContent = data.status || "—";
+                    } else if (label === "Genres") {
+                        dd.textContent = data.genres || "—";
+                    } else if (label === "Series") {
+                        dd.textContent = data.series || "—";
+                    } else if (label === "Rereads") {
+                        if (data.reread !== undefined) {
+                            pair.hidden = false;
+                            dd.textContent = data.reread + " time(s)";
+                        } else {
+                            pair.hidden = true;
+                        }
+                    } else if (label === "Days to finish") {
+                        if (data.days !== undefined) {
+                            pair.hidden = false;
+                            dd.textContent = data.days;
+                        } else {
+                            pair.hidden = true;
+                        }
+                    }
+                });
+
+                const notesText = card.querySelector(".book-info-notes-text");
+                if (notesText) {
+                    notesText.textContent = data.notes || "—";
+                }
+
+                const editForm = card.querySelector("form.book-info-edit");
+                if (editForm) {
+                    editForm.querySelector('[name="book"]').value = data.book || "";
+                    editForm.querySelector('[name="status"]').value = data.status || "";
+                    editForm.querySelector('[name="genres"]').value = data.genres || "";
+                    editForm.querySelector('[name="series"]').value = data.series || "";
+                    const notesField = editForm.querySelector('[name="notes"]');
+                    if (notesField) notesField.value = data.notes || "";
+                    const rereadField = editForm.querySelector('[name="reread"]');
+                    if (rereadField) rereadField.value = data.reread !== undefined ? data.reread : "";
+                }
+
+                card.querySelector(".js-display").hidden = false;
+                card.querySelector(".js-edit").hidden = true;
+                const toggle = card.querySelector(".js-edit-toggle");
+                if (toggle) toggle.hidden = false;
+
+                if (feedbackEl) {
+                    feedbackEl.textContent = "Saved";
+                    feedbackEl.hidden = false;
+                    feedbackEl.classList.add("is-visible");
+                    if (feedbackEl._hideTimer) {
+                        clearTimeout(feedbackEl._hideTimer);
+                    }
+                    feedbackEl._hideTimer = setTimeout(function () {
+                        feedbackEl.classList.remove("is-visible");
+                        feedbackEl.hidden = true;
+                        feedbackEl.textContent = "";
+                        feedbackEl._hideTimer = null;
+                    }, 1800);
+                }
+            }
+
+            document.querySelectorAll("form.book-info-edit").forEach(function (form) {
+                form.addEventListener("submit", async function (event) {
+                    event.preventDefault();
+                    const card = form.closest(".book-info-card");
+                    const submitButton = form.querySelector('button[type="submit"]');
+                    if (submitButton) {
+                        submitButton.disabled = true;
+                        submitButton.dataset.originalLabel = submitButton.textContent;
+                        submitButton.textContent = "Saving…";
+                    }
+                    try {
+                        const response = await fetch(form.action, {
+                            method: "POST",
+                            headers: { "X-Requested-With": "XMLHttpRequest" },
+                            body: new FormData(form),
+                        });
+                        const data = await response.json();
+                        if (!response.ok) {
+                            throw new Error(data.error || "Save failed.");
+                        }
+                        syncBookCard(card, data);
+                    } catch (err) {
+                        window.alert(err.message || "Save failed.");
+                    } finally {
+                        if (submitButton) {
+                            submitButton.disabled = false;
+                            submitButton.textContent = submitButton.dataset.originalLabel || "Save";
+                        }
+                    }
                 });
             });
 
