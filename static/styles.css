@@ -895,6 +895,9 @@ a:hover
     transform: translateY(-3px);
     box-shadow: 0 14px 30px rgba(49,8,31,0.06);
 }
+.book-row[data-book-link] {
+    cursor: pointer;
+}
 
 .book-info-card {
     padding: 1rem;
@@ -3444,7 +3447,7 @@ a:hover
 
 .favorites-section-header {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 0.75rem;
     flex-wrap: wrap;
     margin-bottom: 0.75rem;
@@ -3475,4 +3478,29 @@ a:hover
 
 .favorites-section-link:hover {
     text-decoration: underline;
+}
+
+.favorites-section-toggle {
+    margin-left: 0.15rem;
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+    border: 1px solid rgba(107, 15, 26, 0.18);
+    background: rgba(255, 255, 255, 0.75);
+    color: #6B0F1A;
+    line-height: 1;
+}
+
+.favorites-section-toggle:hover,
+.favorites-section-toggle:focus {
+    background: rgba(107, 15, 26, 0.08);
+    color: #560C15;
+}
+
+.favorites-section-toggle-icon {
+    display: inline-block;
+    transition: transform 0.15s ease;
+}
+
+.favorites-section-toggle.collapsed .favorites-section-toggle-icon {
+    transform: rotate(-90deg);
 }

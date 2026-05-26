@@ -25,7 +25,20 @@
                 <h2 class="favorites-section-title">{{ section.label }}</h2>
                 <a href="/{{ section.category }}" class="favorites-section-link">Go to {{ section.label }} →</a>
                 <span class="favorites-section-count">{{ section.books|length }}</span>
+                <button
+                    type="button"
+                    class="btn btn-sm favorites-section-toggle"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#favorites-table-{{ section.category }}"
+                    aria-expanded="true"
+                    aria-controls="favorites-table-{{ section.category }}"
+                    title="Collapse or expand this section"
+                    aria-label="Collapse or expand {{ section.label }} section"
+                >
+                    <span class="favorites-section-toggle-icon" aria-hidden="true">▾</span>
+                </button>
             </div>
+            <div class="collapse show" id="favorites-table-{{ section.category }}">
             <div class="table-responsive-wrap">
                 <table class="table book-table align-middle">
                     <thead>
@@ -33,12 +46,11 @@
                             <th scope="col" class="col-name">Name</th>
                             <th scope="col" class="col-status">Status</th>
                             <th scope="col" class="col-date">Date</th>
-                            <th scope="col" class="col-info">Open</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for book in section.books %}
-                        <tr class="book-row">
+                        <tr class="book-row" data-book-link data-category="{{ section.category }}" data-book-id="{{ book.id }}">
                             <td class="col-name">
                                 <div class="book-name-cell">
                                     <form action="/favorite/{{ section.category }}/{{ book.id }}" method="post" class="m-0">
@@ -58,13 +70,11 @@
                             <td class="col-date">
                                 <span class="book-date">{{ book.date }}</span>
                             </td>
-                            <td class="col-info">
-                                <a class="btn btn-outline-secondary btn-sm" href="/{{ section.category }}#book-{{ book.id }}">View</a>
-                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
+            </div>
             </div>
         </section>
         {% endif %}

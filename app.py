@@ -202,6 +202,13 @@ def count_books_with_filters(category, user_id, status_filter=None, existence_fi
     return rows[0]["count"] if rows else 0
 
 
+def count_books_missing_genres_with_filters(category, user_id, status_filter=None, existence_filter=None, reread_filter=None):
+    query, params, _ = _build_books_filter_clause(category, user_id, status_filter, existence_filter, reread_filter)
+    query += " AND (genres IS NULL OR genres = '' OR genres = 'None')"
+    rows = db.execute(f"SELECT COUNT(*) AS count {query}", *params)
+    return rows[0]["count"] if rows else 0
+
+
 def sanitize_import_text(text):
     return text.replace("\x00", "")
 
@@ -2616,6 +2623,7 @@ def render_category_page(category, template_name):
             page_num = 1
 
     total_books = count_books_with_filters(category, session["user_id"], status_filter, existence_filter, reread_filter)
+    bulk_suggest_count = count_books_missing_genres_with_filters(category, session["user_id"])
     max_page = max(1, math.ceil(total_books / BOOK_PAGE_SIZE)) if total_books else 1
     page_num = min(page_num, max_page)
     offset = (page_num - 1) * BOOK_PAGE_SIZE
@@ -2648,6 +2656,7 @@ def render_category_page(category, template_name):
         showing_end=showing_end,
         next_page_num=page_num + 1,
         page_size=BOOK_PAGE_SIZE,
+        bulk_suggest_count=bulk_suggest_count,
     )
 
 

@@ -79,7 +79,7 @@
                     <div id="bulk-suggest-bar">
                         <button type="button" class="btn btn-outline-secondary" id="bulk-suggest-btn">
                             Suggest genres for all empty rows
-                            (<span id="bulk-suggest-empty-count">0</span>)
+                            (<span id="bulk-suggest-empty-count">{{ bulk_suggest_count or 0 }}</span>)
                         </button>
                         <span id="bulk-suggest-status" class="grey-text ms-2" aria-live="polite"></span>
                     </div>
@@ -239,12 +239,6 @@
         </div>
 
         {% if total_books is defined and total_books > 0 %}
-        <div class="book-pagination d-flex flex-column flex-md-row justify-content-between align-items-center gap-2 mt-3">
-            <div class="book-pagination-meta grey-text" id="bookPaginationMeta">
-                Showing {{ showing_start }}-{{ showing_end }} of {{ total_books }} books
-            </div>
-            <div class="book-pagination-loading grey-text" id="bookPaginationLoading" hidden>Loading more books…</div>
-        </div>
         <div id="bookScrollSentinel" class="book-scroll-sentinel" aria-hidden="true"></div>
         {% endif %}
 
@@ -282,6 +276,7 @@
             const bookPaginationLoading = document.getElementById("bookPaginationLoading");
             const bookScrollSentinel = document.getElementById("bookScrollSentinel");
             let bookLoadObserver = null;
+            let bulkSuggestRemaining = 0;
 
             function getBookRows() {
                 return Array.from(document.querySelectorAll("tr.book-row"));
@@ -290,7 +285,12 @@
             function refreshBulkSuggestCount() {
                 const countEl = document.getElementById("bulk-suggest-empty-count");
                 if (!countEl) return;
-                countEl.textContent = String(document.querySelectorAll('tr.book-row[data-needs-genres="1"]').length);
+                countEl.textContent = String(Math.max(0, bulkSuggestRemaining));
+            }
+
+            function decrementBulkSuggestCount() {
+                bulkSuggestRemaining = Math.max(0, bulkSuggestRemaining - 1);
+                refreshBulkSuggestCount();
             }
 
             function updateSearchMeta(visibleCount, query) {
@@ -326,6 +326,12 @@
             if (bookPageSearch) {
                 bookPageSearch.addEventListener("input", applyPageSearch);
                 applyPageSearch();
+            }
+
+            const bulkSuggestCountEl = document.getElementById("bulk-suggest-empty-count");
+            if (bulkSuggestCountEl) {
+                bulkSuggestRemaining = parseInt(bulkSuggestCountEl.textContent || "0", 10) || 0;
+                refreshBulkSuggestCount();
             }
 
             document.addEventListener("click", function (event) {
@@ -386,6 +392,7 @@
                                 .filter(Boolean);
                             if (genres.length) {
                                 genresInput.value = genres.join(", ");
+                                decrementBulkSuggestCount();
                             } else {
                                 genresInput.placeholder = "No suggestions found";
                                 setTimeout(function () { genresInput.placeholder = originalPlaceholder; }, 3000);
@@ -622,7 +629,7 @@
                 let running = false;
 
                 function refreshCount() {
-                    countEl.textContent = String(document.querySelectorAll('tr.book-row[data-needs-genres="1"]').length);
+                    countEl.textContent = String(Math.max(0, bulkSuggestRemaining));
                 }
                 refreshCount();
 
@@ -679,6 +686,7 @@
                             const editInput = row.querySelector('form.book-info-edit [name="genres"]');
                             if (editInput) editInput.value = joined;
                             row.dataset.needsGenres = "0";
+                            decrementBulkSuggestCount();
                             ok++;
                         } catch (err) {
                             skipped++;

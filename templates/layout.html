@@ -259,6 +259,7 @@
               document.addEventListener("click", function (e) {
                   const link = e.target.closest("[data-book-link]");
                   if (!link) return;
+                  if (e.target.closest("button, a, input, select, textarea, label, form")) return;
                   e.preventDefault();
                   const category = link.dataset.category;
                   const bookId = link.dataset.bookId;
