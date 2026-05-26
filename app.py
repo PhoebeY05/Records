@@ -1931,7 +1931,7 @@ def import_completed_books(lines, user_id):
             if entry["date"] and (existing["date"] is None or entry["date"] < existing["date"]):
                 existing["date"] = entry["date"]
             existing["notes"].extend(entry["notes"])
-            existing["reread"] += 1 + entry["reread"]
+            existing["reread"] += 1
             if not existing["series"] and entry["series"]:
                 existing["series"] = entry["series"]
         else:
@@ -1942,7 +1942,6 @@ def import_completed_books(lines, user_id):
         entry_notes = merge_notes(entry["notes"])
 
         if existing:
-            increment = entry["reread"] if entry["reread"] > 0 else 1
             merged = merge_notes([existing[0]["notes"], entry_notes])
             undo_actions.append(
                 {
@@ -1957,7 +1956,7 @@ def import_completed_books(lines, user_id):
             )
             db.execute(
                 "UPDATE completed SET reread = ?, notes = ? WHERE id = ? AND user_id = ?",
-                existing[0]["reread"] + increment,
+                existing[0]["reread"] + 1,
                 merged,
                 existing[0]["id"],
                 user_id,
