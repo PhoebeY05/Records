@@ -1506,6 +1506,16 @@ a:hover
     letter-spacing: 0.12em;
 }
 
+.book-detail-modal .book-detail-category-pill {
+    padding: 0.28rem 0.55rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.16);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: rgba(255, 248, 245, 0.9);
+    box-shadow: none;
+    backdrop-filter: blur(4px);
+}
+
 .book-detail-modal .modal-body {
     padding: 1.5rem 1.5rem 1.25rem;
     background: linear-gradient(180deg, #FFFCF4 0%, #FBF4E2 100%);
@@ -1754,8 +1764,8 @@ a:hover
 
 /* --- Genre trends page --- */
 .trends-current-card {
-    border-left: 4px solid #6B0F1A;
-    background: #faf6f3;
+    border-left: 4px solid rgba(107, 15, 26, 0.55);
+    background: #fcfbfa;
 }
 .trends-current-hint {
     font-size: 0.85rem;
@@ -1772,21 +1782,23 @@ a:hover
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
-    padding: 0.25rem 0.65rem;
+    padding: 0.22rem 0.6rem;
     border-radius: 999px;
-    background: #efe7e1;
-    color: #3a2a25;
+    background: #f6f1ec;
+    color: #4b3b35;
+    border: 1px solid #e6ddd5;
     font-family: 'Georgia';
-    font-size: 0.92rem;
+    font-size: 0.88rem;
 }
 .trends-genre-badge-strong {
-    background: #6B0F1A;
-    color: #fff;
+    background: rgba(107, 15, 26, 0.08);
+    color: #6B0F1A;
+    border-color: rgba(107, 15, 26, 0.14);
     font-weight: 600;
 }
 .trends-genre-count {
-    opacity: 0.7;
-    font-size: 0.82em;
+    opacity: 0.72;
+    font-size: 0.8em;
 }
 .trends-period-list {
     list-style: none;
@@ -1803,8 +1815,8 @@ a:hover
     background: #fff;
 }
 .trends-period-current {
-    border-color: #6B0F1A;
-    background: #fff8f5;
+    border-color: rgba(107, 15, 26, 0.3);
+    background: #fffdfb;
 }
 .trends-period-header {
     display: flex;
@@ -1849,6 +1861,7 @@ a:hover
     border-radius: 10px;
     padding: 0.9rem 1rem;
     margin-bottom: 0.9rem;
+    position: relative;
 }
 .trends-chart-header {
     display: flex;
@@ -1898,12 +1911,48 @@ a:hover
 .trends-chart-line-volume {
     stroke: #6B0F1A;
 }
+.trends-chart-point {
+    pointer-events: all;
+    cursor: crosshair;
+}
+.trends-chart-hit {
+    pointer-events: all;
+}
 .trends-chart-dot {
     transition: r 0.15s ease;
     cursor: default;
 }
 .trends-chart-dot:hover {
     r: 5;
+}
+.trends-chart-tooltip {
+    position: absolute;
+    z-index: 3;
+    max-width: 18rem;
+    padding: 0.55rem 0.7rem;
+    border-radius: 12px;
+    background: rgba(255, 252, 244, 0.98);
+    border: 1px solid #e0d7cf;
+    box-shadow: 0 10px 24px rgba(49, 8, 31, 0.12);
+    pointer-events: none;
+    color: #3a2a25;
+}
+.trends-chart-tooltip[hidden] {
+    display: none;
+}
+.trends-chart-tooltip-title {
+    display: block;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #6B0F1A;
+}
+.trends-chart-tooltip-meta {
+    display: block;
+    margin-top: 0.15rem;
+    font-size: 0.92rem;
+    color: #3a2a25;
 }
 .trends-chart-legend {
     list-style: none;
@@ -2083,6 +2132,496 @@ a:hover
     color: #8a7c75;
     font-size: 0.8rem;
     white-space: nowrap;
+}
+
+.trends-breadcrumb {
+    font-family: 'Georgia';
+    font-size: 0.9rem;
+    margin-bottom: 0.25rem;
+}
+.trends-breadcrumb a {
+    color: #6B0F1A;
+    text-decoration: none;
+}
+.trends-breadcrumb a:hover {
+    text-decoration: underline;
+}
+
+/* ---------- Predict next book ---------- */
+.predict-next-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.25rem;
+    flex-wrap: wrap;
+    padding: 1rem 1.2rem;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #fff8f5 0%, #fdebe2 100%);
+    border: 1px solid #ead9d1;
+}
+.predict-next-intro {
+    flex: 1 1 280px;
+    min-width: 0;
+}
+.predict-next-title {
+    margin: 0 0 0.3rem 0;
+    font-family: 'Georgia';
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #6B0F1A;
+}
+.predict-next-hint {
+    color: #6d625b;
+    font-size: 0.9rem;
+}
+.predict-next-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: #6B0F1A;
+    color: #fff;
+    border: 1px solid #6B0F1A;
+    padding: 0.6rem 1.1rem;
+    border-radius: 999px;
+    font-family: 'Georgia';
+    font-weight: 700;
+    font-size: 0.98rem;
+    box-shadow: 0 4px 10px rgba(107, 15, 26, 0.18);
+    transition: background-color 0.15s ease, transform 0.15s ease;
+    flex: 0 0 auto;
+}
+.predict-next-btn:hover {
+    background: #560C15;
+    color: #fff;
+    border-color: #560C15;
+    transform: translateY(-1px);
+}
+.predict-next-btn:disabled {
+    opacity: 0.6;
+    cursor: wait;
+    transform: none;
+}
+.predict-next-icon {
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.predict-result-card {
+    margin-bottom: 1.25rem;
+    padding: 1rem 1.2rem;
+    border-radius: 14px;
+    background: #fff;
+    border: 1px solid #e0d7cf;
+    box-shadow: 0 2px 8px rgba(49, 8, 31, 0.06);
+}
+.predict-result-empty {
+    color: #6d625b;
+    font-size: 0.95rem;
+    text-align: center;
+    padding: 0.5rem 0;
+}
+.predict-result-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.55rem;
+    flex-wrap: wrap;
+}
+.predict-result-category {
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 0.2rem 0.65rem;
+    border-radius: 999px;
+}
+.predict-result-category.series-book-category {
+    background: #f6f1ec;
+    color: #4b3b35;
+    border: 1px solid #e6ddd5;
+}
+.predict-result-category.series-book-category-completed,
+.predict-result-category.series-book-category-tbr,
+.predict-result-category.series-book-category-unfinished {
+    background: #f6f1ec;
+    color: #4b3b35;
+    border: 1px solid #e6ddd5;
+}
+.predict-result-reroll {
+    background: transparent;
+    border: 1px solid #d9cdc2;
+    color: #6B0F1A;
+    border-radius: 999px;
+    font-family: 'Georgia';
+    font-size: 0.85rem;
+    padding: 0.25rem 0.75rem;
+}
+.predict-result-reroll:hover {
+    background: #fff8f5;
+    color: #6B0F1A;
+    border-color: #6B0F1A;
+}
+.predict-result-title {
+    margin: 0 0 0.4rem 0;
+    font-family: 'Georgia';
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #3a2a25;
+    cursor: pointer;
+    word-break: break-word;
+}
+.predict-result-title:hover {
+    color: #6B0F1A;
+    text-decoration: underline;
+}
+.predict-result-meta {
+    color: #6d625b;
+    font-size: 0.88rem;
+}
+.predict-result-badges {
+    margin-bottom: 0.5rem;
+}
+.predict-result-footer {
+    color: #8a7c75;
+    font-size: 0.82rem;
+    font-style: italic;
+}
+
+@media (max-width: 600px) {
+    .predict-next-card {
+        padding: 0.85rem 1rem;
+    }
+    .predict-next-btn {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+/* ---------- Genres page ---------- */
+.genres-page {
+    font-family: 'Georgia';
+    color: #3a2a25;
+}
+.genres-subtitle {
+    color: #6c757d;
+    font-style: italic;
+    font-size: 0.95rem;
+}
+.genres-summary {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem 1.5rem;
+    flex-wrap: wrap;
+}
+.genres-summary-pills {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.6rem;
+}
+.genres-stat-pill {
+    background: #fff;
+    border: 1px solid #e0d7cf;
+    border-radius: 999px;
+    padding: 0.35rem 0.85rem;
+    font-size: 0.9rem;
+    color: #3a2a25;
+}
+.genres-stat-pill strong {
+    color: #6B0F1A;
+    font-family: 'Georgia';
+    font-size: 1rem;
+}
+.genres-stat-pill-warn {
+    border-color: #d9b78a;
+    background: #fff8ec;
+    color: #7a5a23;
+}
+.genres-trends-link {
+    color: #6B0F1A;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+}
+.genres-trends-link:hover {
+    text-decoration: underline;
+}
+.genres-filter input {
+    max-width: 320px;
+}
+
+.genres-filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.55rem 0.85rem;
+    padding: 0.85rem 1rem;
+    background: #fff;
+    border: 1px solid #e0d7cf;
+    border-radius: 10px;
+}
+.genres-filter-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+}
+.genres-filter-field label {
+    font-size: 0.74rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #8a7c75;
+    font-weight: 600;
+}
+.genres-filter-field input,
+.genres-filter-field select {
+    font-size: 0.9rem;
+}
+.genres-filter-search {
+    flex: 1 1 200px;
+    max-width: 280px;
+}
+.genres-filter-field select {
+    min-width: 150px;
+}
+.genres-filter-min input {
+    width: 90px;
+}
+.genres-filter-checks {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem 0.85rem;
+    padding-bottom: 0.35rem;
+}
+.genres-filter-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.88rem;
+    color: #3a2a25;
+    cursor: pointer;
+    margin: 0;
+}
+.genres-filter-check input {
+    accent-color: #6B0F1A;
+    cursor: pointer;
+}
+.genres-filter-reset {
+    align-self: flex-end;
+    margin-bottom: 0.05rem;
+    background: transparent;
+    border: 1px solid #d9cdc2;
+    color: #6B0F1A;
+    border-radius: 999px;
+    font-family: 'Georgia';
+    font-size: 0.83rem;
+    padding: 0.25rem 0.85rem;
+}
+.genres-filter-reset:hover {
+    background: #fff8f5;
+    color: #6B0F1A;
+    border-color: #6B0F1A;
+}
+
+.genres-result-count {
+    font-size: 0.85rem;
+    color: #8a7c75;
+    font-style: italic;
+    margin: 0 0 0.7rem 0.15rem;
+}
+
+.genre-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+.genre-card-wrapper[hidden] {
+    display: none;
+}
+.genre-card {
+    background: #fff;
+    border: 1px solid #e0d7cf;
+    border-radius: 10px;
+    overflow: hidden;
+    transition: box-shadow 0.15s ease;
+}
+.genre-card[open] {
+    box-shadow: 0 1px 4px rgba(107, 15, 26, 0.08);
+}
+.genre-card-summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 0.7rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+.genre-card-summary::-webkit-details-marker {
+    display: none;
+}
+.genre-card-head {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    flex-wrap: wrap;
+}
+.genre-card-chevron {
+    color: #6B0F1A;
+    font-size: 0.85rem;
+    flex: 0 0 0.85rem;
+    line-height: 1;
+    transition: transform 0.15s ease;
+}
+.genre-card-chevron::before {
+    content: "▸";
+}
+.genre-card[open] > .genre-card-summary .genre-card-chevron {
+    transform: rotate(90deg);
+}
+.genre-card-name {
+    font-family: 'Georgia';
+    font-weight: 700;
+    color: #3a2a25;
+    flex: 1 1 140px;
+    min-width: 0;
+    word-break: break-word;
+}
+.genre-card-bar-track {
+    flex: 1.5 1 140px;
+    height: 8px;
+    background: #f0e6dd;
+    border-radius: 4px;
+    overflow: hidden;
+    min-width: 100px;
+}
+.genre-card-bar-fill {
+    display: block;
+    height: 100%;
+    background: linear-gradient(to right, #8a1828, #6B0F1A);
+    border-radius: 4px;
+}
+.genre-card-total {
+    display: flex;
+    align-items: baseline;
+    gap: 0.3rem;
+    flex: 0 0 auto;
+}
+.genre-card-total-number {
+    font-family: 'Georgia';
+    font-weight: 700;
+    color: #6B0F1A;
+    font-size: 1.05rem;
+    min-width: 1.8rem;
+    text-align: right;
+}
+.genre-card-total-label {
+    color: #8a7c75;
+    font-size: 0.82rem;
+}
+.genre-card-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    padding-left: 1.75rem;
+}
+.genre-card-chip {
+    font-size: 0.78rem;
+    padding: 0.1rem 0.6rem;
+    border-radius: 999px;
+    background: #f0e6dd;
+    color: #5a4a45;
+    line-height: 1.5;
+}
+.genre-card-chip-completed {
+    background: #fbe6e0;
+    color: #6B0F1A;
+}
+.genre-card-chip-tbr {
+    background: #f0e1cc;
+    color: #7a5a23;
+}
+.genre-card-chip-unfinished {
+    background: #e6e0db;
+    color: #5a5a5a;
+}
+
+.genre-card-body {
+    padding: 0.5rem 1rem 1rem 1.75rem;
+    border-top: 1px solid #f0e6dd;
+    margin-top: 0.15rem;
+}
+.genre-category-block + .genre-category-block {
+    margin-top: 0.85rem;
+}
+.genre-category-block:first-child {
+    margin-top: 0.6rem;
+}
+.genre-category-title {
+    font-family: 'Georgia';
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: #3a2a25;
+    margin: 0 0 0.4rem 0;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.genre-category-count {
+    color: #8a7c75;
+    font-weight: 400;
+    font-size: 0.82rem;
+    text-transform: none;
+    letter-spacing: 0;
+    margin-left: 0.25rem;
+}
+.genre-book-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 0 1.25rem;
+}
+.genre-book-list li {
+    border-bottom: 1px dashed #ecdfd4;
+    padding: 0.3rem 0;
+    font-size: 0.9rem;
+    line-height: 1.35;
+}
+.genre-book-list a {
+    color: #3a2a25;
+    text-decoration: none;
+    display: block;
+    word-break: break-word;
+}
+.genre-book-list a:hover {
+    color: #6B0F1A;
+    text-decoration: underline;
+}
+
+@media (max-width: 600px) {
+    .genre-card-summary {
+        padding: 0.65rem 0.8rem;
+    }
+    .genre-card-bar-track {
+        flex-basis: 100%;
+        order: 3;
+        margin-top: 0.1rem;
+    }
+    .genre-card-total {
+        order: 2;
+    }
+    .genre-card-chips {
+        padding-left: 0;
+    }
+    .genre-card-body {
+        padding: 0.4rem 0.85rem 0.9rem 0.85rem;
+    }
 }
 
 /* ---------- Analytics page ---------- */

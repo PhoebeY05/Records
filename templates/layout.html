@@ -49,7 +49,7 @@
         <div class="collapse navbar-collapse" id="mainNav">
           <ul class="navbar-nav main-nav-links me-auto mb-2 mb-lg-0">
             {% set books_active = request.path in ['/tbr', '/completed', '/unfinished'] %}
-            {% set insights_active = request.path in ['/series', '/trends', '/analytics'] or request.path.startswith('/analytics/') %}
+            {% set insights_active = request.path in ['/series', '/genres', '/trends', '/analytics'] or request.path.startswith('/analytics/') %}
             <li class="nav-item dropdown">
               <a class="nav-link dropdown-toggle georgia {% if books_active %}active{% endif %}" href="#" id="booksDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
                 Books
@@ -66,7 +66,7 @@
               </a>
               <ul class="dropdown-menu" aria-labelledby="insightsDropdown">
                 <li><a class="dropdown-item georgia {% if request.path == '/series' %}active{% endif %}" href="/series">Series</a></li>
-                <li><a class="dropdown-item georgia {% if request.path == '/trends' %}active{% endif %}" href="/trends">Trends</a></li>
+                <li><a class="dropdown-item georgia {% if request.path in ['/genres', '/trends'] %}active{% endif %}" href="/genres">Genres</a></li>
                 <li><a class="dropdown-item georgia {% if request.path.startswith('/analytics') %}active{% endif %}" href="/analytics">Analytics</a></li>
               </ul>
             </li>
@@ -175,11 +175,6 @@
               if (!modalEl) return;
               const form = modalEl.querySelector(".book-detail-form");
               const CATEGORY_LABELS = { completed: "Completed", unfinished: "Unfinished", tbr: "To Be Read" };
-              const CATEGORY_BADGE_CLASSES = {
-                  completed: "series-book-category-completed",
-                  unfinished: "series-book-category-unfinished",
-                  tbr: "series-book-category-tbr",
-              };
               let currentData = null;
 
               function setEditMode(editing) {
@@ -194,9 +189,7 @@
                   form.action = "/update/" + data.category + "/" + data.id;
                   const categoryPill = modalEl.querySelector(".book-detail-category-pill");
                   if (categoryPill) {
-                      categoryPill.className = "book-detail-category-pill series-book-category";
-                      const badgeClass = CATEGORY_BADGE_CLASSES[data.category];
-                      if (badgeClass) categoryPill.classList.add(badgeClass);
+                      categoryPill.className = "book-detail-category-pill";
                       categoryPill.textContent = CATEGORY_LABELS[data.category] || data.category;
                   }
                   modalEl.querySelector(".book-detail-title").textContent = data.book;

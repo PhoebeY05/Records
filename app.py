@@ -3100,6 +3100,252 @@ def trends_view():
     return render_template("trends.html", trends=data, title="Genre Trends")
 
 
+def _get_recent_interest_set(user_id):
+    """Just the current-interest genre set for a user.
+
+    Lighter than running the whole `compute_genre_trends` pipeline since we
+    only need the set of genres the user is currently into.
+    """
+    rows = db.execute(
+        "SELECT id, book, date, genres FROM completed WHERE user_id = ?",
+        user_id,
+    )
+    parsed = []
+    for row in rows:
+        genres = _parse_genre_list(row.get("genres"))
+        if not genres:
+            continue
+        date_obj = parse_date_text(str(row.get("date") or ""))
+        if date_obj is None:
+            continue
+        parsed.append(
+            {
+                "id": row["id"],
+                "book": row["book"],
+                "date": date_obj,
+                "genres_list": genres,
+            }
+        )
+    parsed.sort(key=lambda r: r["date"])
+    current_interest, _window = _recent_interest_window(parsed, top_n=8)
+    return {item["genre"] for item in current_interest}, current_interest
+
+
+CATEGORY_LABELS = {
+    "tbr": "To Be Read",
+    "unfinished": "Unfinished",
+    "completed": "Completed",
+}
+
+
+def predict_next_book(user_id, exclude_ids=None):
+    """Recommend a single book to read next, based on overlap with the
+    user's current-interest genres.
+
+    Eligible pool: every book EXCEPT completed books that were finished in
+    the last 1 year. Among the rest, books that share more genres with the
+    current-interest set score higher. TBR > unfinished > older completed
+    is preferred via small category boosts. Returns one of the top
+    candidates at random so the user can re-roll the suggestion.
+    """
+    interest_set, interest_list = _get_recent_interest_set(user_id)
+    if not interest_set:
+        return {
+            "book": None,
+            "reason": "no_interest",
+            "interest": [],
+        }
+
+    today = date.today()
+    one_year_ago = today - timedelta(days=365)
+    exclude_ids = set(exclude_ids or [])
+    category_boost = {"tbr": 1.0, "unfinished": 0.9, "completed": 0.6}
+
+    candidates = []
+    for cat in ("tbr", "unfinished", "completed"):
+        rows = db.execute(
+            f"SELECT id, book, genres, date FROM {cat} WHERE user_id = ?",
+            user_id,
+        )
+        for r in rows:
+            key = f"{cat}:{r['id']}"
+            if key in exclude_ids:
+                continue
+            genres = set(_parse_genre_list(r.get("genres")))
+            matched = genres & interest_set
+            if not matched:
+                continue
+
+            # Filter: skip completed books finished in the last 12 months.
+            if cat == "completed":
+                d = parse_date_text(str(r.get("date") or ""))
+                if d is not None and d >= one_year_ago:
+                    continue
+
+            score = len(matched) * category_boost[cat]
+            candidates.append(
+                {
+                    "id": r["id"],
+                    "key": key,
+                    "book": r["book"],
+                    "category": cat,
+                    "category_label": CATEGORY_LABELS.get(cat, cat),
+                    "score": round(score, 2),
+                    "overlap": len(matched),
+                    "matched_genres": sorted(matched),
+                    "date": str(r.get("date") or ""),
+                }
+            )
+
+    if not candidates:
+        return {
+            "book": None,
+            "reason": "no_match",
+            "interest": [item["genre"] for item in interest_list],
+        }
+
+    candidates.sort(key=lambda c: (-c["score"], -c["overlap"]))
+    top = candidates[: min(len(candidates), 10)]
+    pick = random.choice(top)
+
+    return {
+        "book": pick,
+        "candidate_count": len(candidates),
+        "interest": [item["genre"] for item in interest_list],
+    }
+
+
+@app.route("/api/predict_next_book", methods=["POST"])
+def api_predict_next_book():
+    if not session_user_exists():
+        return {"error": "auth"}, 401
+    payload = request.get_json(silent=True) or {}
+    exclude = payload.get("exclude_ids") or []
+    if not isinstance(exclude, list):
+        exclude = []
+    result = predict_next_book(session["user_id"], exclude_ids=exclude)
+    return result
+
+
+LANGUAGE_LABELS = {
+    "chinese": "Chinese",
+    "japanese": "Japanese",
+    "korean": "Korean",
+    "english": "English",
+    "other": "Other",
+}
+
+
+def _detect_text_language(text):
+    """Classify a short string (a genre name) into a coarse language bucket.
+
+    Order matters: a Japanese genre often contains kanji, so detect kana
+    first. Otherwise any Han characters fall back to Chinese.
+    """
+    if not text:
+        return "other"
+    if re.search(r"[぀-ゟ゠-ヿ]", text):
+        return "japanese"
+    if re.search(r"[가-힯]", text):
+        return "korean"
+    if re.search(r"[一-鿿㐀-䶿]", text):
+        return "chinese"
+    if re.search(r"[A-Za-z]", text):
+        return "english"
+    return "other"
+
+
+def compute_genres(user_id):
+    """Collect every genre tagged on the user's books with the books in each.
+
+    Books are grouped per category so the page can show:
+        Fantasy — 50 books (40 completed, 7 TBR, 3 unfinished)
+            Completed: ...
+            To Be Read: ...
+            Unfinished: ...
+    """
+    genres_map = {}
+    total_tagged = 0
+    total_untagged = 0
+    category_totals = {"completed": 0, "tbr": 0, "unfinished": 0}
+
+    for category in ("completed", "tbr", "unfinished"):
+        rows = db.execute(
+            f"SELECT id, book, genres FROM {category} WHERE user_id = ? "
+            "ORDER BY LOWER(book) ASC",
+            user_id,
+        )
+        for r in rows:
+            genres = _parse_genre_list(r.get("genres"))
+            if not genres:
+                total_untagged += 1
+                continue
+            total_tagged += 1
+            category_totals[category] += 1
+            for g in genres:
+                bucket = genres_map.setdefault(
+                    g, {"completed": [], "tbr": [], "unfinished": []}
+                )
+                bucket[category].append({"id": r["id"], "book": r["book"]})
+
+    items = []
+    language_totals = {}
+    for g, by_cat in genres_map.items():
+        c = len(by_cat["completed"])
+        t = len(by_cat["tbr"])
+        u = len(by_cat["unfinished"])
+        lang = _detect_text_language(g)
+        language_totals[lang] = language_totals.get(lang, 0) + 1
+        items.append(
+            {
+                "genre": g,
+                "total": c + t + u,
+                "completed": by_cat["completed"],
+                "tbr": by_cat["tbr"],
+                "unfinished": by_cat["unfinished"],
+                "completed_count": c,
+                "tbr_count": t,
+                "unfinished_count": u,
+                "language": lang,
+                "language_label": LANGUAGE_LABELS.get(lang, lang.title()),
+            }
+        )
+    items.sort(key=lambda x: (-x["total"], x["genre"].lower()))
+
+    max_total = items[0]["total"] if items else 0
+    for it in items:
+        it["bar_percent"] = (
+            round(it["total"] * 100 / max_total, 1) if max_total else 0
+        )
+
+    # Only surface languages that actually appear, in a stable order.
+    language_order = ("chinese", "japanese", "korean", "english", "other")
+    languages_present = [
+        {"key": k, "label": LANGUAGE_LABELS[k], "count": language_totals[k]}
+        for k in language_order
+        if language_totals.get(k)
+    ]
+
+    return {
+        "total_distinct": len(items),
+        "total_tagged": total_tagged,
+        "total_untagged": total_untagged,
+        "category_totals": category_totals,
+        "languages": languages_present,
+        "entries": items,
+    }
+
+
+@app.route("/genres", methods=["GET"])
+def genres_view():
+    if not session_user_exists():
+        session.clear()
+        flash("Your session is no longer valid. Please log in again.")
+        return redirect("/")
+    data = compute_genres(session["user_id"])
+    return render_template("genres.html", genres=data, title="Genres")
+
+
 def compute_analytics(user_id):
     """Aggregate reading statistics for the analytics page."""
     completed_rows = db.execute(
@@ -3157,6 +3403,38 @@ def compute_analytics(user_id):
         }
         for y, c in years_sorted
     ]
+    year_genre_freq = {}
+    for r in completed_dated:
+        parsed_genres = _parse_genre_list(r.get("genres"))
+        if not parsed_genres:
+            continue
+        year_bucket = year_genre_freq.setdefault(r["_date"].year, {})
+        for g in parsed_genres:
+            year_bucket[g] = year_bucket.get(g, 0) + 1
+    year_genre_highlights = []
+    for y, c in years_sorted:
+        freq = year_genre_freq.get(y, {})
+        total_year_genres = sum(freq.values())
+        top_year_genres_raw = sorted(
+            freq.items(), key=lambda kv: (-kv[1], kv[0])
+        )[:3]
+        year_genre_highlights.append(
+            {
+                "year": y,
+                "count": c,
+                "top_genres": [
+                    {
+                        "genre": g,
+                        "count": count,
+                        "percent": round(count * 100 / total_year_genres, 1)
+                        if total_year_genres
+                        else 0,
+                    }
+                    for g, count in top_year_genres_raw
+                ],
+                "has_genres": bool(freq),
+            }
+        )
 
     # Books per month — rolling 12-month window.
     today = date.today()
@@ -3332,6 +3610,26 @@ def compute_analytics(user_id):
     completed_with_date = len(completed_dated)
     completed_without_date = total_completed - completed_with_date
 
+    # Build the same Reading-evolution line charts the Trends page uses, so
+    # the PDF report can show them too. We need dated completions that also
+    # have at least one genre tag.
+    chart_rows = []
+    for r in completed_dated:
+        genres_list = _parse_genre_list(r.get("genres"))
+        if not genres_list:
+            continue
+        chart_rows.append(
+            {
+                "id": r["id"],
+                "book": r["book"],
+                "date": r["_date"],
+                "genres_list": genres_list,
+            }
+        )
+    chart_rows.sort(key=lambda x: x["date"])
+    time_series = _bucket_genre_time_series(chart_rows, top_n=6)
+    evolution_charts = _build_trend_charts(time_series) if time_series else None
+
     return {
         "totals": {
             "completed": total_completed,
@@ -3361,6 +3659,7 @@ def compute_analytics(user_id):
             "months": round(span_days / 30.4375, 1) if span_days else 0,
         },
         "year_counts": year_counts_list,
+        "year_genre_highlights": year_genre_highlights,
         "month_counts": month_counts,
         "top_genres": top_genres,
         "top_series": top_series,
@@ -3375,6 +3674,7 @@ def compute_analytics(user_id):
         "status_breakdown": status_breakdown,
         "busiest_year": busiest_year,
         "busiest_month": busiest_month,
+        "evolution_charts": evolution_charts,
     }
 
 

@@ -1,0 +1,250 @@
+{% extends "layout.html" %}
+
+{% block title %}
+    Genres
+{% endblock %}
+
+{% block main %}
+<div class="container book-list-page mt-4 genres-page">
+    <h1 class="title mb-2">Genres</h1>
+    <p class="genres-subtitle mb-4">Every genre in your library and the books in each.</p>
+
+    {% if genres.total_distinct == 0 %}
+        <div class="alert alert-info" role="alert">
+            <strong>No genres tagged yet.</strong>
+            Add genre tags to your books to see them grouped here.
+        </div>
+    {% else %}
+        <div class="genres-summary mb-4">
+            <div class="genres-summary-pills">
+                <div class="genres-stat-pill">
+                    <strong>{{ genres.total_distinct }}</strong>
+                    distinct genre{% if genres.total_distinct != 1 %}s{% endif %}
+                </div>
+                <div class="genres-stat-pill">
+                    <strong>{{ genres.total_tagged }}</strong>
+                    book{% if genres.total_tagged != 1 %}s{% endif %} tagged
+                </div>
+                {% if genres.total_untagged %}
+                    <div class="genres-stat-pill genres-stat-pill-warn">
+                        {{ genres.total_untagged }} book{% if genres.total_untagged != 1 %}s have{% else %} has{% endif %} no genres
+                    </div>
+                {% endif %}
+            </div>
+            <a href="/trends" class="genres-trends-link" aria-label="Go to genre trends">
+                See genre trends over time →
+            </a>
+        </div>
+
+        <div class="genres-filter-bar mb-3">
+            <div class="genres-filter-field genres-filter-search">
+                <label for="genresSearchInput">Search genres</label>
+                <input id="genresSearchInput" class="form-control georgia"
+                       type="search" placeholder="Search genres…"
+                       autocomplete="off">
+            </div>
+
+            <div class="genres-filter-field">
+                <label for="genresSortSelect">Sort by</label>
+                <select id="genresSortSelect" class="form-select georgia">
+                    <option value="total-desc" selected>Most books</option>
+                    <option value="total-asc">Fewest books</option>
+                    <option value="name-asc">Name (A–Z)</option>
+                    <option value="name-desc">Name (Z–A)</option>
+                    <option value="completed-desc">Most completed</option>
+                    <option value="tbr-desc">Most TBR</option>
+                    <option value="unfinished-desc">Most unfinished</option>
+                </select>
+            </div>
+
+            {% if genres.languages and genres.languages | length > 1 %}
+                <div class="genres-filter-field">
+                    <label for="genresLanguageSelect">Language</label>
+                    <select id="genresLanguageSelect" class="form-select georgia">
+                        <option value="">All languages</option>
+                        {% for lang in genres.languages %}
+                            <option value="{{ lang.key }}">{{ lang.label }} ({{ lang.count }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            {% endif %}
+
+            <div class="genres-filter-field genres-filter-min">
+                <label for="genresMinInput">Min books</label>
+                <input id="genresMinInput" class="form-control georgia"
+                       type="number" min="0" step="1" value="0">
+            </div>
+
+            <div class="genres-filter-checks" role="group" aria-label="Status filters">
+                <label class="genres-filter-check">
+                    <input type="checkbox" id="genresHasTbr">
+                    <span>Has TBR</span>
+                </label>
+                <label class="genres-filter-check">
+                    <input type="checkbox" id="genresHasUnfinished">
+                    <span>Has unfinished</span>
+                </label>
+                <label class="genres-filter-check">
+                    <input type="checkbox" id="genresHasCompleted">
+                    <span>Has completed</span>
+                </label>
+            </div>
+
+            <button type="button" id="genresResetBtn" class="btn btn-sm genres-filter-reset">Reset</button>
+        </div>
+
+        <p class="genres-result-count" id="genresResultCount" aria-live="polite">
+            Showing all {{ genres.total_distinct }} genre{% if genres.total_distinct != 1 %}s{% endif %}.
+        </p>
+
+        <ul class="genre-list" id="genreList">
+            {% for g in genres.entries %}
+                <li class="genre-card-wrapper"
+                    data-genre-name="{{ g.genre | lower }}"
+                    data-total="{{ g.total }}"
+                    data-completed="{{ g.completed_count }}"
+                    data-tbr="{{ g.tbr_count }}"
+                    data-unfinished="{{ g.unfinished_count }}"
+                    data-language="{{ g.language }}">
+                    <details class="genre-card">
+                        <summary class="genre-card-summary">
+                            <div class="genre-card-head">
+                                <span class="genre-card-chevron" aria-hidden="true"></span>
+                                <span class="genre-card-name">{{ g.genre }}</span>
+                                <span class="genre-card-bar-track" aria-hidden="true">
+                                    <span class="genre-card-bar-fill" style="width: {{ g.bar_percent }}%;"></span>
+                                </span>
+                                <span class="genre-card-total">
+                                    <span class="genre-card-total-number">{{ g.total }}</span>
+                                    <span class="genre-card-total-label">book{% if g.total != 1 %}s{% endif %}</span>
+                                </span>
+                            </div>
+                            {% if g.completed_count or g.tbr_count or g.unfinished_count %}
+                                <div class="genre-card-chips">
+                                    {% if g.completed_count %}<span class="genre-card-chip genre-card-chip-completed">{{ g.completed_count }} completed</span>{% endif %}
+                                    {% if g.tbr_count %}<span class="genre-card-chip genre-card-chip-tbr">{{ g.tbr_count }} TBR</span>{% endif %}
+                                    {% if g.unfinished_count %}<span class="genre-card-chip genre-card-chip-unfinished">{{ g.unfinished_count }} unfinished</span>{% endif %}
+                                </div>
+                            {% endif %}
+                        </summary>
+                        <div class="genre-card-body">
+                            {% for category, label, books in [
+                                ('completed', 'Completed', g.completed),
+                                ('tbr', 'To Be Read', g.tbr),
+                                ('unfinished', 'Unfinished', g.unfinished)
+                            ] %}
+                                {% if books %}
+                                    <div class="genre-category-block">
+                                        <h3 class="genre-category-title">{{ label }} <span class="genre-category-count">({{ books | length }})</span></h3>
+                                        <ul class="genre-book-list">
+                                            {% for b in books %}
+                                                <li>
+                                                    <a href="#" data-book-link
+                                                       data-category="{{ category }}"
+                                                       data-book-id="{{ b.id }}">{{ b.book }}</a>
+                                                </li>
+                                            {% endfor %}
+                                        </ul>
+                                    </div>
+                                {% endif %}
+                            {% endfor %}
+                        </div>
+                    </details>
+                </li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+</div>
+
+<script>
+    (function () {
+        const list = document.getElementById("genreList");
+        if (!list) return;
+        const searchInput = document.getElementById("genresSearchInput");
+        const sortSelect = document.getElementById("genresSortSelect");
+        const langSelect = document.getElementById("genresLanguageSelect");
+        const minInput = document.getElementById("genresMinInput");
+        const hasTbr = document.getElementById("genresHasTbr");
+        const hasUnfinished = document.getElementById("genresHasUnfinished");
+        const hasCompleted = document.getElementById("genresHasCompleted");
+        const resetBtn = document.getElementById("genresResetBtn");
+        const resultCount = document.getElementById("genresResultCount");
+
+        const wrappers = Array.from(list.querySelectorAll(".genre-card-wrapper"));
+        const totalCount = wrappers.length;
+
+        function num(el, key) {
+            return parseInt(el.dataset[key] || "0", 10) || 0;
+        }
+
+        function applyAll() {
+            const q = (searchInput.value || "").trim().toLowerCase();
+            const lang = langSelect ? langSelect.value : "";
+            const min = parseInt(minInput.value || "0", 10) || 0;
+            const requireTbr = hasTbr.checked;
+            const requireUnf = hasUnfinished.checked;
+            const requireCompleted = hasCompleted.checked;
+
+            let visible = 0;
+            wrappers.forEach(function (el) {
+                const name = el.dataset.genreName || "";
+                let show = true;
+                if (q && name.indexOf(q) === -1) show = false;
+                if (show && lang && el.dataset.language !== lang) show = false;
+                if (show && num(el, "total") < min) show = false;
+                if (show && requireTbr && num(el, "tbr") === 0) show = false;
+                if (show && requireUnf && num(el, "unfinished") === 0) show = false;
+                if (show && requireCompleted && num(el, "completed") === 0) show = false;
+                el.hidden = !show;
+                if (show) visible++;
+            });
+
+            // Sort visible (and hidden, so toggling later preserves order).
+            const sortValue = sortSelect.value;
+            const dash = sortValue.lastIndexOf("-");
+            const field = sortValue.slice(0, dash);
+            const dir = sortValue.slice(dash + 1);
+            const mul = dir === "asc" ? 1 : -1;
+
+            const sorted = wrappers.slice().sort(function (a, b) {
+                if (field === "name") {
+                    return a.dataset.genreName.localeCompare(b.dataset.genreName) * mul;
+                }
+                const diff = num(a, field) - num(b, field);
+                if (diff !== 0) return diff * mul;
+                return a.dataset.genreName.localeCompare(b.dataset.genreName);
+            });
+            sorted.forEach(function (el) { list.appendChild(el); });
+
+            if (resultCount) {
+                if (visible === totalCount) {
+                    resultCount.textContent = "Showing all " + totalCount + " genre" +
+                        (totalCount === 1 ? "" : "s") + ".";
+                } else {
+                    resultCount.textContent = "Showing " + visible + " of " + totalCount +
+                        " genre" + (totalCount === 1 ? "" : "s") + ".";
+                }
+            }
+        }
+
+        ["input", "change"].forEach(function (evt) {
+            [searchInput, sortSelect, langSelect, minInput, hasTbr, hasUnfinished, hasCompleted]
+                .filter(Boolean)
+                .forEach(function (el) { el.addEventListener(evt, applyAll); });
+        });
+
+        if (resetBtn) {
+            resetBtn.addEventListener("click", function () {
+                searchInput.value = "";
+                sortSelect.value = "total-desc";
+                if (langSelect) langSelect.value = "";
+                minInput.value = "0";
+                hasTbr.checked = false;
+                hasUnfinished.checked = false;
+                hasCompleted.checked = false;
+                applyAll();
+            });
+        }
+    })();
+</script>
+{% endblock %}
