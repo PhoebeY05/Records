@@ -5,6 +5,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from datetime import date, datetime, timedelta
 from html import unescape
 from html.parser import HTMLParser
+import base64
 import io
 import importlib
 import math
@@ -1037,98 +1038,434 @@ def _fetch_rendered_page_text(url):
         return ""
 
 
-AI_GENRE_SCORE_FLOOR = 0.15
-MAX_PAGES_TO_FETCH = 6
+DESKTOP_UA = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/120.0.0.0 Safari/537.36"
+)
+
+
+def _genres_from_jjwxc(url):
+    """Extract genres from a JJWXC book page (晋江文学城).
+
+    JJWXC novel pages render the category row with one of two labels:
+      - desktop: `文章类型：原创-言情-架空历史-奇幻`
+      - mobile : `类型：原创-言情-幻想未来-科幻-女主视角`
+    """
+    text = _fetch_page_text(url)
+    if not text:
+        return []
+    lines = re.split(r"[\n\r]+", text)
+    for idx, raw in enumerate(lines):
+        line = raw.strip()
+        match = re.match(r"^(?:文章)?类型\s*[:：]\s*(.*)$", line)
+        if not match:
+            continue
+        value = match.group(1).strip()
+        if not value and idx + 1 < len(lines):
+            value = lines[idx + 1].strip()
+        if not value:
+            continue
+        parts = re.split(r"[-－—–/|,]+", value)
+        cleaned = [p.strip() for p in parts if p.strip()]
+        return [p for p in cleaned if 1 <= len(p) <= 20][:6]
+    return []
+
+
+def _genres_from_goodreads(url):
+    """Extract genres from a Goodreads book page.
+
+    Modern Goodreads renders the genre list under `[data-testid="genresList"]`
+    with an "...more" sentinel button that we drop.
+    """
+    if sync_playwright is None:
+        return []
+    chrome_path = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(
+                headless=True,
+                executable_path=chrome_path if os.path.exists(chrome_path) else None,
+            )
+            try:
+                page = browser.new_page(user_agent=DESKTOP_UA, locale="en-US")
+                response = page.goto(url, wait_until="domcontentloaded", timeout=20000)
+                if response is not None and response.status >= 400:
+                    return []
+                page.wait_for_timeout(3500)
+                genres = page.evaluate(
+                    """() => {
+                        const collected = [];
+                        const selectors = [
+                            '[data-testid="genresList"] a',
+                            '.BookPageMetadataSection__genres a',
+                            'a.bookPageGenreLink',
+                        ];
+                        for (const sel of selectors) {
+                            document.querySelectorAll(sel).forEach(el => {
+                                const text = (el.innerText || '').trim();
+                                if (text) collected.push(text);
+                            });
+                            if (collected.length) break;
+                        }
+                        return collected;
+                    }"""
+                )
+            finally:
+                browser.close()
+    except Exception:
+        return []
+
+    seen = set()
+    out = []
+    for g in genres:
+        if not g or g == "...more":
+            continue
+        key = g.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(g)
+    return out[:6]
+
+
+def _genres_from_qidian(url):
+    """Best-effort genre extraction from Qidian (起点).
+
+    Qidian aggressively challenges headless browsers — many requests come back
+    as 202 with an empty body. The handler tries a couple of common selectors
+    and returns an empty list when the challenge wins.
+    """
+    if sync_playwright is None:
+        return []
+    chrome_path = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(
+                headless=True,
+                executable_path=chrome_path if os.path.exists(chrome_path) else None,
+            )
+            try:
+                page = browser.new_page(user_agent=DESKTOP_UA, locale="zh-CN")
+                response = page.goto(url, wait_until="domcontentloaded", timeout=20000)
+                if response is not None and response.status >= 400:
+                    return []
+                page.wait_for_timeout(5000)
+                tags = page.evaluate(
+                    """() => {
+                        const out = [];
+                        const selectors = [
+                            '.crumb a',
+                            '.book-info-detail .tag a',
+                            '.book-information .crumb a',
+                            '.all-attr a',
+                            '.book-attribute .all-attr a',
+                            'a[href*="chanId"]',
+                        ];
+                        for (const sel of selectors) {
+                            document.querySelectorAll(sel).forEach(el => {
+                                const text = (el.innerText || '').trim();
+                                if (text) out.push(text);
+                            });
+                            if (out.length) break;
+                        }
+                        return out;
+                    }"""
+                )
+            finally:
+                browser.close()
+    except Exception:
+        return []
+
+    drop = {"首页", "全部作品", "完本作品", "网络小说", "起点中文网", "免费小说"}
+    seen = set()
+    out = []
+    for t in tags:
+        if not t or t in drop:
+            continue
+        key = t.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(t)
+    return out[:5]
+
+
+def _find_mal_url(title):
+    """Use MyAnimeList's prefix-search JSON API to find the top match URL.
+
+    Endpoint: /search/prefix.json?type=manga&keyword=<q>&v=1
+    Returns `https://myanimelist.net/manga/<id>/<slug>` for the first item, or
+    falls back to the anime search if manga has no hits.
+    """
+    if not title:
+        return None
+    base = "https://myanimelist.net/search/prefix.json"
+    for kind in ("manga", "anime"):
+        try:
+            response = requests.get(
+                base,
+                params={"type": kind, "keyword": title, "v": "1"},
+                headers={"User-Agent": DESKTOP_UA},
+                timeout=8,
+            )
+            response.raise_for_status()
+            data = response.json()
+        except Exception:
+            continue
+        categories = data.get("categories") or []
+        for cat in categories:
+            for item in cat.get("items") or []:
+                url = item.get("url") or ""
+                if url.startswith("http"):
+                    return url
+    return None
+
+
+def _genres_from_mal(url):
+    """Extract genres from a MAL detail page via `span[itemprop="genre"]`."""
+    try:
+        response = requests.get(
+            url, headers={"User-Agent": DESKTOP_UA}, timeout=10
+        )
+        response.raise_for_status()
+    except Exception:
+        return []
+    soup = BeautifulSoup(response.text, "html.parser")
+    seen = set()
+    out = []
+    for span in soup.select('span[itemprop="genre"]'):
+        text = span.get_text(strip=True)
+        if not text:
+            continue
+        key = text.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(text)
+    return out[:6]
+
+
+def _find_goodreads_url(title):
+    """Search goodreads.com via Playwright and return the first book-detail URL.
+
+    Goodreads returns a 202 with the anti-bot challenge in flight, but the
+    actual results render in the DOM after a few seconds. We wait, then grab
+    the first `/book/show/<id>` anchor.
+    """
+    if sync_playwright is None or not title:
+        return None
+    chrome_path = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    search_url = f"https://www.goodreads.com/search?q={quote_plus(title)}"
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(
+                headless=True,
+                executable_path=chrome_path if os.path.exists(chrome_path) else None,
+            )
+            try:
+                page = browser.new_page(user_agent=DESKTOP_UA, locale="en-US")
+                page.goto(search_url, wait_until="domcontentloaded", timeout=20000)
+                page.wait_for_timeout(8000)
+                href = page.evaluate(
+                    """() => {
+                        const a = document.querySelector('a[href*="/book/show/"]');
+                        return a ? a.href : null;
+                    }"""
+                )
+                return href
+            finally:
+                browser.close()
+    except Exception:
+        return None
+
+
+def _google_web_search_results(query, max_results=5):
+    """Scrape google.com/search via headless Playwright.
+
+    Bypasses two of Google's basic bot tells:
+      - the AutomationControlled blink feature flag (launch arg),
+      - the `navigator.webdriver` property (init script).
+
+    These aren't a stealth toolkit; Google can still serve its "unusual
+    traffic" CAPTCHA on a hot IP. When that happens we return [] and the
+    caller falls back to Bing.
+    """
+    if sync_playwright is None or not query:
+        return []
+    chrome_path = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+    search_url = "https://www.google.com/search?q=" + quote_plus(query) + "&hl=en"
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(
+                headless=True,
+                executable_path=chrome_path if os.path.exists(chrome_path) else None,
+                args=["--disable-blink-features=AutomationControlled"],
+            )
+            try:
+                context = browser.new_context(
+                    user_agent=DESKTOP_UA,
+                    locale="en-US",
+                    viewport={"width": 1280, "height": 800},
+                )
+                context.add_init_script(
+                    "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
+                )
+                page = context.new_page()
+                page.goto(search_url, wait_until="domcontentloaded", timeout=20000)
+                page.wait_for_timeout(2500)
+                body_head = page.evaluate(
+                    "() => document.body ? document.body.innerText.slice(0, 500).toLowerCase() : ''"
+                )
+                if "unusual traffic" in body_head or "our systems have detected" in body_head:
+                    return []
+                results = page.evaluate(
+                    """(limit) => {
+                        const out = [];
+                        document.querySelectorAll('a').forEach(a => {
+                            const h3 = a.querySelector('h3');
+                            if (!h3) return;
+                            const href = a.href || '';
+                            if (!href.startsWith('http')) return;
+                            if (href.includes('google.com/')) return;
+                            out.push({
+                                title: (h3.innerText || '').trim().slice(0, 200),
+                                href: href,
+                                snippet: '',
+                            });
+                        });
+                        return out.slice(0, limit);
+                    }""",
+                    max_results,
+                )
+                return results
+            finally:
+                browser.close()
+    except Exception:
+        return []
+
+
+def _find_url_on_site(query, domain):
+    """Search via Google (Playwright) then Bing, returning the first result
+    URL whose host matches `domain` (after decoding Bing's /ck/a wrapper).
+    """
+    for fetcher in (_google_web_search_results, _bing_search_results):
+        try:
+            results = fetcher(query, max_results=5) or []
+        except Exception:
+            results = []
+        for result in results:
+            href = result.get("href") or ""
+            if "bing.com/ck/a" in href:
+                href = _decode_bing_redirect(href)
+            if href and _matches_domain(href, domain):
+                return href
+    return None
+
+
+def _contains_cjk(text):
+    return any("一" <= c <= "鿿" for c in (text or ""))
+
+
+def _decode_bing_redirect(url):
+    """Decode Bing's /ck/a?...&u=a1<base64>&... wrapper into the real URL.
+
+    `requests.head(allow_redirects=True)` on these wrappers returns 204 without
+    following anywhere — Bing's redirect is server-side and won't fire on HEAD.
+    The destination is embedded directly in the `u` parameter as
+    "a1" + base64(real_url), so we can decode locally.
+    """
+    try:
+        parsed = urlparse(url)
+        if "bing.com" not in parsed.netloc or "/ck/a" not in parsed.path:
+            return url
+        params = parse_qs(parsed.query)
+        encoded = params.get("u", [None])[0]
+        if not encoded or not encoded.startswith("a1"):
+            return url
+        payload = encoded[2:]
+        payload += "=" * ((-len(payload)) % 4)
+        decoded = base64.urlsafe_b64decode(payload).decode("utf-8", errors="replace")
+        if decoded.startswith("http"):
+            return decoded
+    except Exception:
+        pass
+    return url
+
+
+def _matches_domain(url, domain):
+    host = (urlparse(url).netloc or "").lower()
+    return host == domain or host.endswith("." + domain)
 
 
 def infer_genres(title, summary=None, top_k=3):
-    """Infer genres by opening search results and reading page metadata/content.
+    """Infer genres by looking up the title on the user's trusted sites.
 
-    Two passes:
-      1. Try every candidate page for explicit structured metadata rows
-         (e.g. `文章类型：原创-言情-...`). These are real tags.
-      2. Only if pass 1 yields nothing, fall back to embedding-similarity
-         ranking of page phrases, gated by a score floor.
+    Routing (set by title language):
+      - Chinese (CJK): JJWXC → Qidian
+      - English (default): Goodreads → MyAnimeList
 
-    Returns list of (genre, score, source).
+    Per-site strategy:
+      - Goodreads: native Playwright search; `a[href*="/book/show/"]` → page.
+      - MyAnimeList: prefix-search JSON API (no auth, no browser) → page.
+      - JJWXC, Qidian: their native search is gated/blocked, so we route
+        through the existing search-engine chain (Baidu surfaces those
+        domains when not throttled) and filter URLs by hostname.
+
+    Books not on any of these sites return an empty list — by design — so the
+    user fills genres manually.
     """
-    query = title if not summary else f"{title} {summary}"
-
-    seen_urls = set()
-    all_results = []
-    for fetcher in (_google_search_results, _bing_search_results, _baidu_search_results):
-        try:
-            engine_results = fetcher(query, max_results=5) or []
-        except Exception:
-            engine_results = []
-        for result in engine_results:
-            href = result.get("href") or ""
-            if not href or href in seen_urls:
-                continue
-            seen_urls.add(href)
-            all_results.append(result)
-
-    if not all_results:
-        return []
-
-    all_results = all_results[:MAX_PAGES_TO_FETCH]
+    base_query = title if not summary else f"{title} {summary}"
     title_key = _normalize_match_text(title)
 
-    def _accept(genre, score, page_url, seen, ranked):
-        key = genre.casefold()
-        if key in seen:
-            return False
-        genre_key = _normalize_match_text(genre)
-        if not genre_key:
-            return False
-        if title_key and (title_key in genre_key or genre_key in title_key):
-            return False
-        seen.add(key)
-        ranked.append((genre, float(score), page_url))
-        return True
+    def _goodreads_step():
+        url = _find_goodreads_url(base_query)
+        return (url, _genres_from_goodreads(url)) if url else None
 
-    # Pass 1: collect structured rows across all pages.
-    seen = set()
-    ranked = []
-    ai_pages = []
-    for result in all_results:
-        page_url = result.get("href") or ""
-        page_text = _fetch_page_text(page_url)
-        if not page_text:
+    def _mal_step():
+        url = _find_mal_url(base_query)
+        return (url, _genres_from_mal(url)) if url else None
+
+    def _jjwxc_step():
+        url = _find_url_on_site(f"{base_query} 晋江", "jjwxc.net")
+        return (url, _genres_from_jjwxc(url)) if url else None
+
+    def _qidian_step():
+        url = _find_url_on_site(f"{base_query} 起点", "qidian.com")
+        return (url, _genres_from_qidian(url)) if url else None
+
+    if _contains_cjk(base_query):
+        steps = (_jjwxc_step, _qidian_step)
+    else:
+        steps = (_goodreads_step, _mal_step)
+
+    for step in steps:
+        outcome = step()
+        if not outcome:
             continue
-        structured = _extract_structured_genres(page_text)
-        if not structured:
-            ai_pages.append((page_text, page_url))
+        url, genres = outcome
+        if not genres:
             continue
-        # Short-circuit: one page yielding ≥top_k structured rows is a complete,
-        # trusted source — return immediately without fetching remaining URLs.
-        if len(structured) >= top_k:
-            page_ranked = []
-            page_seen = set()
-            for genre in structured:
-                _accept(genre, 1.0, page_url, page_seen, page_ranked)
-                if len(page_ranked) >= top_k:
-                    return page_ranked
-        # Either <top_k, or dedup against title dropped below top_k — accumulate
-        # across pages.
-        for genre in structured:
-            _accept(genre, 1.0, page_url, seen, ranked)
-            if len(ranked) >= top_k:
-                return ranked
 
-    if ranked:
-        return ranked
-
-    # Pass 2: fall back to AI ranking on pages with no structured rows.
-    for page_text, page_url in ai_pages:
-        ai_ranked = _extract_ai_genre_candidates(page_text, title, top_k=top_k)
-        for genre, score in ai_ranked:
-            if score < AI_GENRE_SCORE_FLOOR:
+        seen = set()
+        ranked = []
+        for genre in genres:
+            key = genre.casefold()
+            if key in seen:
                 continue
-            _accept(genre, score, page_url, seen, ranked)
+            genre_key = _normalize_match_text(genre)
+            if not genre_key:
+                continue
+            if title_key and (title_key in genre_key or genre_key in title_key):
+                continue
+            seen.add(key)
+            ranked.append((genre, 1.0, url))
             if len(ranked) >= top_k:
-                return ranked
-    return ranked
+                break
+        if ranked:
+            return ranked
+
+    return []
 
 
 @app.route("/api/infer_genres", methods=["POST"])
@@ -1199,7 +1536,14 @@ def parse_date_text(date_text):
     if not cleaned:
         return None
 
-    # Strict format: day full-month-name year (e.g. 21 March 2026)
+    # ISO date (YYYY-MM-DD) — how dates are stored in the database.
+    if re.fullmatch(r"\d{4}-\d{1,2}-\d{1,2}", cleaned):
+        try:
+            return datetime.strptime(cleaned, "%Y-%m-%d").date()
+        except ValueError:
+            return None
+
+    # Human form: day full-month-name year (e.g. 21 March 2026)
     if not re.fullmatch(r"\d{1,2}\s+[A-Za-z]+\s+\d{4}", cleaned):
         return None
 
@@ -2312,9 +2656,13 @@ def compute_genre_trends(user_id, top_n=3):
     )
 
     parsed = []
+    missing_genres_completed = []
     for row in raw_rows:
         genres = _parse_genre_list(row.get("genres"))
         if not genres:
+            missing_genres_completed.append(
+                {"id": row["id"], "book": row["book"], "date": row.get("date")}
+            )
             continue
         date_obj = parse_date_text(str(row.get("date") or ""))
         if date_obj is None:
@@ -2327,6 +2675,25 @@ def compute_genre_trends(user_id, top_n=3):
                 "genres_list": genres,
             }
         )
+
+    # Also include TBR / unfinished books missing genres, so the user can fix them all in one place.
+    missing_other = []
+    for category in ("tbr", "unfinished"):
+        for row in db.execute(
+            f"SELECT id, book, genres FROM {category} WHERE user_id = ?",
+            user_id,
+        ):
+            if not _parse_genre_list(row.get("genres")):
+                missing_other.append(
+                    {"id": row["id"], "book": row["book"], "category": category}
+                )
+
+    missing_completed_sorted = sorted(
+        missing_genres_completed, key=lambda r: (r["book"] or "").lower()
+    )
+    missing_other_sorted = sorted(
+        missing_other, key=lambda r: (r["book"] or "").lower()
+    )
 
     parsed.sort(key=lambda r: r["date"])
     splits = _find_change_points(parsed)
@@ -2356,6 +2723,8 @@ def compute_genre_trends(user_id, top_n=3):
         "total_books": len(parsed),
         "periods": periods,
         "current_interest": current,
+        "missing_completed": missing_completed_sorted,
+        "missing_other": missing_other_sorted,
     }
 
 
@@ -2367,6 +2736,294 @@ def trends_view():
         return redirect("/")
     data = compute_genre_trends(session["user_id"])
     return render_template("trends.html", trends=data, title="Genre Trends")
+
+
+def compute_analytics(user_id):
+    """Aggregate reading statistics for the analytics page."""
+    completed_rows = db.execute(
+        "SELECT id, book, date, days, reread, genres, series, status "
+        "FROM completed WHERE user_id = ?",
+        user_id,
+    )
+    tbr_rows = db.execute(
+        "SELECT id, genres FROM tbr WHERE user_id = ?", user_id
+    )
+    unfinished_rows = db.execute(
+        "SELECT id, genres FROM unfinished WHERE user_id = ?", user_id
+    )
+
+    completed_dated = []
+    for r in completed_rows:
+        parsed = parse_date_text(str(r.get("date") or ""))
+        if parsed:
+            r["_date"] = parsed
+            completed_dated.append(r)
+
+    total_completed = len(completed_rows)
+    total_tbr = len(tbr_rows)
+    total_unfinished = len(unfinished_rows)
+    total_books = total_completed + total_tbr + total_unfinished
+    completed_with_genres = 0
+    completed_with_series = 0
+
+    # Reading span (based on completed books with parseable dates).
+    if completed_dated:
+        sorted_by_date = sorted(completed_dated, key=lambda x: x["_date"])
+        first_date = sorted_by_date[0]["_date"]
+        last_date = sorted_by_date[-1]["_date"]
+        span_days = (last_date - first_date).days + 1
+    else:
+        first_date = None
+        last_date = None
+        span_days = 0
+
+    # Books per year.
+    year_counts = {}
+    monthly_all = {}
+    for r in completed_dated:
+        d = r["_date"]
+        year_counts[d.year] = year_counts.get(d.year, 0) + 1
+        key = (d.year, d.month)
+        monthly_all[key] = monthly_all.get(key, 0) + 1
+    years_sorted = sorted(year_counts.items())
+    max_year_count = max((c for _, c in years_sorted), default=0)
+    year_counts_list = [
+        {
+            "year": y,
+            "count": c,
+            "percent": round(c * 100 / max_year_count, 1) if max_year_count else 0,
+        }
+        for y, c in years_sorted
+    ]
+
+    # Books per month — rolling 12-month window.
+    today = date.today()
+    months_window = []
+    cursor = date(today.year, today.month, 1)
+    for _ in range(12):
+        months_window.append(cursor)
+        if cursor.month == 1:
+            cursor = date(cursor.year - 1, 12, 1)
+        else:
+            cursor = date(cursor.year, cursor.month - 1, 1)
+    months_window.reverse()
+    month_counts = []
+    for m in months_window:
+        c = monthly_all.get((m.year, m.month), 0)
+        month_counts.append(
+            {
+                "label": m.strftime("%b %Y"),
+                "short": m.strftime("%b"),
+                "year": m.year,
+                "count": c,
+            }
+        )
+    max_month_count = max((m["count"] for m in month_counts), default=0)
+    for m in month_counts:
+        m["percent"] = (
+            round(m["count"] * 100 / max_month_count, 1) if max_month_count else 0
+        )
+
+    # Genre frequencies (across completed books only — that's "what you've read").
+    genre_freq = {}
+    for r in completed_rows:
+        parsed_genres = _parse_genre_list(r.get("genres"))
+        if parsed_genres:
+            completed_with_genres += 1
+        if (r.get("series") or "").strip():
+            completed_with_series += 1
+        for g in parsed_genres:
+            genre_freq[g] = genre_freq.get(g, 0) + 1
+    total_genre_tags = sum(genre_freq.values())
+    top_genres_raw = sorted(
+        genre_freq.items(), key=lambda kv: (-kv[1], kv[0])
+    )[:10]
+    max_genre_count = top_genres_raw[0][1] if top_genres_raw else 0
+    top_genres = [
+        {
+            "genre": g,
+            "count": c,
+            "percent": (
+                round(c * 100 / total_genre_tags, 1) if total_genre_tags else 0
+            ),
+            "bar_percent": (
+                round(c * 100 / max_genre_count, 1) if max_genre_count else 0
+            ),
+        }
+        for g, c in top_genres_raw
+    ]
+
+    # Top series (by completed book count).
+    series_freq = {}
+    for r in completed_rows:
+        s = (r.get("series") or "").strip()
+        if s:
+            series_freq[s] = series_freq.get(s, 0) + 1
+    top_series_raw = sorted(
+        series_freq.items(), key=lambda kv: (-kv[1], kv[0])
+    )[:8]
+    max_series_count = top_series_raw[0][1] if top_series_raw else 0
+    top_series = [
+        {
+            "series": s,
+            "count": c,
+            "bar_percent": (
+                round(c * 100 / max_series_count, 1) if max_series_count else 0
+            ),
+        }
+        for s, c in top_series_raw
+    ]
+
+    # Reading pace from `days` column.
+    days_vals = [
+        (r.get("days") or 0) for r in completed_rows if (r.get("days") or 0) > 0
+    ]
+    avg_days = None
+    median_days = None
+    fastest_book = None
+    slowest_book = None
+    if days_vals:
+        avg_days = round(sum(days_vals) / len(days_vals), 1)
+        sorted_days = sorted(days_vals)
+        mid = len(sorted_days) // 2
+        if len(sorted_days) % 2 == 1:
+            median_days = sorted_days[mid]
+        else:
+            median_days = round(
+                (sorted_days[mid - 1] + sorted_days[mid]) / 2, 1
+            )
+        with_days = [
+            r for r in completed_rows if (r.get("days") or 0) > 0
+        ]
+        fastest = min(with_days, key=lambda r: r["days"])
+        slowest = max(with_days, key=lambda r: r["days"])
+        fastest_book = {"book": fastest["book"], "days": fastest["days"]}
+        slowest_book = {"book": slowest["book"], "days": slowest["days"]}
+
+    avg_per_month = None
+    if span_days > 0 and total_completed > 0:
+        months_span = max(span_days / 30.4375, 1.0)
+        avg_per_month = round(total_completed / months_span, 2)
+
+    # Reread stats.
+    reread_total = sum((r.get("reread") or 0) for r in completed_rows)
+    reread_books = sum(
+        1 for r in completed_rows if (r.get("reread") or 0) > 0
+    )
+    top_rereads = sorted(
+        [r for r in completed_rows if (r.get("reread") or 0) > 0],
+        key=lambda r: (-(r.get("reread") or 0), r.get("book") or ""),
+    )[:5]
+    top_rereads = [
+        {"book": r["book"], "reread": r["reread"]} for r in top_rereads
+    ]
+
+    # Status breakdown — overall library distribution.
+    status_breakdown = []
+    status_colors = {
+        "completed": "#6B0F1A",
+        "tbr": "#b08968",
+        "unfinished": "#8a7c75",
+    }
+    running_percent = 0.0
+    status_items = list((
+        ("Completed", total_completed, "completed"),
+        ("To Be Read", total_tbr, "tbr"),
+        ("Unfinished", total_unfinished, "unfinished"),
+    ))
+    for idx, (label, n, cls) in enumerate(status_items):
+        pct = round(n * 100 / total_books, 1) if total_books else 0
+        start_pct = round(running_percent, 1)
+        running_percent += n * 100 / total_books if total_books else 0
+        end_pct = 100.0 if idx == len(status_items) - 1 and total_books else round(running_percent, 1)
+        status_breakdown.append(
+            {
+                "label": label,
+                "count": n,
+                "percent": pct,
+                "key": cls,
+                "color": status_colors[cls],
+                "start_pct": start_pct,
+                "end_pct": end_pct,
+            }
+        )
+
+    completion_rate = round(total_completed * 100 / total_books, 1) if total_books else 0
+    genre_coverage = round(completed_with_genres * 100 / total_completed, 1) if total_completed else 0
+    series_coverage = round(completed_with_series * 100 / total_completed, 1) if total_completed else 0
+    reread_share = round(reread_books * 100 / total_completed, 1) if total_completed else 0
+
+    # Busiest highlights.
+    busiest_year = None
+    if year_counts:
+        y, c = max(year_counts.items(), key=lambda kv: kv[1])
+        busiest_year = {"year": y, "count": c}
+    busiest_month = None
+    if monthly_all:
+        (y, mo), c = max(monthly_all.items(), key=lambda kv: kv[1])
+        busiest_month = {
+            "label": date(y, mo, 1).strftime("%B %Y"),
+            "count": c,
+        }
+
+    # How many completed books have a parseable date (data quality hint).
+    completed_with_date = len(completed_dated)
+    completed_without_date = total_completed - completed_with_date
+
+    return {
+        "totals": {
+            "completed": total_completed,
+            "tbr": total_tbr,
+            "unfinished": total_unfinished,
+            "all": total_books,
+            "rereads_total": reread_total,
+            "reread_books": reread_books,
+            "completed_with_date": completed_with_date,
+            "completed_without_date": completed_without_date,
+            "completed_with_genres": completed_with_genres,
+            "completed_with_series": completed_with_series,
+            "distinct_genres": len(genre_freq),
+            "distinct_series": len(series_freq),
+        },
+        "ratios": {
+            "completion_rate": completion_rate,
+            "genre_coverage": genre_coverage,
+            "series_coverage": series_coverage,
+            "reread_share": reread_share,
+        },
+        "span": {
+            "start_date": first_date,
+            "end_date": last_date,
+            "days": span_days,
+            "years": round(span_days / 365.25, 1) if span_days else 0,
+            "months": round(span_days / 30.4375, 1) if span_days else 0,
+        },
+        "year_counts": year_counts_list,
+        "month_counts": month_counts,
+        "top_genres": top_genres,
+        "top_series": top_series,
+        "pace": {
+            "avg_days": avg_days,
+            "median_days": median_days,
+            "fastest": fastest_book,
+            "slowest": slowest_book,
+            "avg_per_month": avg_per_month,
+        },
+        "top_rereads": top_rereads,
+        "status_breakdown": status_breakdown,
+        "busiest_year": busiest_year,
+        "busiest_month": busiest_month,
+    }
+
+
+@app.route("/analytics", methods=["GET"])
+def analytics_view():
+    if not session_user_exists():
+        session.clear()
+        flash("Your session is no longer valid. Please log in again.")
+        return redirect("/")
+    data = compute_analytics(session["user_id"])
+    return render_template("analytics.html", stats=data, title="Analytics")
 
 
 @app.route("/api/update_genres/<category>/<int:book_id>", methods=["POST"])
