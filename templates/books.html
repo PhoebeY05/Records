@@ -56,7 +56,7 @@
       </div>
     {% endif %}
 
-    <div class="container book-list-page mt-4">
+    <div class="container book-list-page mt-4" data-page-url="{{ page }}" data-next-page-num="{{ next_page_num or 2 }}" data-has-more="{{ '1' if has_more else '0' }}" data-loading="0" data-total-books="{{ total_books or 0 }}">
         {% for msg in get_flashed_messages() %}
         <div class="alert alert-info alert-dismissible fade show" role="alert">
             {{msg}}
@@ -240,13 +240,12 @@
 
         {% if total_books is defined and total_books > 0 %}
         <div class="book-pagination d-flex flex-column flex-md-row justify-content-between align-items-center gap-2 mt-3">
-            <div class="book-pagination-meta grey-text">
+            <div class="book-pagination-meta grey-text" id="bookPaginationMeta">
                 Showing {{ showing_start }}-{{ showing_end }} of {{ total_books }} books
             </div>
-            {% if has_more %}
-            <a class="btn btn-outline-secondary book-pagination-more" href="{{ page }}?page_num={{ next_page_num }}">Load more</a>
-            {% endif %}
+            <div class="book-pagination-loading grey-text" id="bookPaginationLoading" hidden>Loading more books…</div>
         </div>
+        <div id="bookScrollSentinel" class="book-scroll-sentinel" aria-hidden="true"></div>
         {% endif %}
 
         {% if books|length == 0 %}
@@ -275,19 +274,24 @@
                 if (button) button.setAttribute("aria-expanded", "false");
             }
 
-            document.querySelectorAll(".js-book-toggle").forEach(function (btn) {
-                btn.addEventListener("click", function () {
-                    const target = document.getElementById(btn.dataset.target);
-                    if (!target) return;
-                    if (target.hidden) showInfoRow(target);
-                    else hideInfoRow(target);
-                });
-            });
-
             const bookPageSearch = document.getElementById("bookPageSearch");
-            const bookPageSearchClear = document.getElementById("bookPageSearchClear");
             const bookPageSearchMeta = document.getElementById("bookPageSearchMeta");
-            const bookRows = Array.from(document.querySelectorAll("tr.book-row"));
+            const booksPage = document.querySelector(".book-list-page");
+            const bookTableBody = document.querySelector(".book-table tbody");
+            const bookPaginationMeta = document.getElementById("bookPaginationMeta");
+            const bookPaginationLoading = document.getElementById("bookPaginationLoading");
+            const bookScrollSentinel = document.getElementById("bookScrollSentinel");
+            let bookLoadObserver = null;
+
+            function getBookRows() {
+                return Array.from(document.querySelectorAll("tr.book-row"));
+            }
+
+            function refreshBulkSuggestCount() {
+                const countEl = document.getElementById("bulk-suggest-empty-count");
+                if (!countEl) return;
+                countEl.textContent = String(document.querySelectorAll('tr.book-row[data-needs-genres="1"]').length);
+            }
 
             function updateSearchMeta(visibleCount, query) {
                 if (!bookPageSearchMeta) return;
@@ -302,7 +306,7 @@
                 if (!bookPageSearch) return;
                 const query = (bookPageSearch.value || "").trim().toLowerCase();
                 let visibleCount = 0;
-                bookRows.forEach(function (row) {
+                getBookRows().forEach(function (row) {
                     const infoRow = document.getElementById("book-info-" + row.dataset.bookId);
                     const haystack = row.dataset.searchText || "";
                     const match = !query || haystack.includes(query);
@@ -317,22 +321,180 @@
                     if (match) visibleCount++;
                 });
                 updateSearchMeta(visibleCount, query);
-                if (bookPageSearchClear) {
-                    bookPageSearchClear.disabled = !query;
-                }
             }
 
             if (bookPageSearch) {
                 bookPageSearch.addEventListener("input", applyPageSearch);
                 applyPageSearch();
             }
-            if (bookPageSearchClear) {
-                bookPageSearchClear.addEventListener("click", function () {
-                    if (!bookPageSearch) return;
-                    bookPageSearch.value = "";
-                    bookPageSearch.focus();
+
+            document.addEventListener("click", function (event) {
+                const toggleBtn = event.target.closest(".js-book-toggle");
+                if (toggleBtn) {
+                    const target = document.getElementById(toggleBtn.dataset.target);
+                    if (!target) return;
+                    if (target.hidden) showInfoRow(target);
+                    else hideInfoRow(target);
+                    return;
+                }
+
+                const editToggleBtn = event.target.closest(".js-edit-toggle");
+                if (editToggleBtn) {
+                    const card = editToggleBtn.closest(".book-info-card");
+                    if (!card) return;
+                    card.querySelector(".js-display").hidden = true;
+                    card.querySelector(".js-edit").hidden = false;
+                    editToggleBtn.hidden = true;
+                    return;
+                }
+
+                const editCancelBtn = event.target.closest(".js-edit-cancel");
+                if (editCancelBtn) {
+                    const card = editCancelBtn.closest(".book-info-card");
+                    if (!card) return;
+                    card.querySelector(".js-display").hidden = false;
+                    card.querySelector(".js-edit").hidden = true;
+                    const toggle = card.querySelector(".js-edit-toggle");
+                    if (toggle) toggle.hidden = false;
+                    return;
+                }
+
+                const suggestBtn = event.target.closest(".js-suggest-genres");
+                if (suggestBtn) {
+                    const form = suggestBtn.closest("form");
+                    if (!form) return;
+                    const titleInput = form.querySelector('[name="book"]');
+                    const genresInput = form.querySelector('[name="genres"]');
+                    if (!titleInput || !genresInput) return;
+                    const title = (titleInput.value || "").trim();
+                    if (!title) { titleInput.focus(); return; }
+                    const originalLabel = suggestBtn.textContent;
+                    const originalPlaceholder = genresInput.placeholder;
+                    suggestBtn.disabled = true;
+                    suggestBtn.textContent = "…";
+                    (async function () {
+                        try {
+                            const response = await fetch("/api/infer_genres", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ title: title }),
+                            });
+                            if (!response.ok) throw new Error("HTTP " + response.status);
+                            const data = await response.json();
+                            const genres = (data.suggestions || [])
+                                .map(function (s) { return s.genre; })
+                                .filter(Boolean);
+                            if (genres.length) {
+                                genresInput.value = genres.join(", ");
+                            } else {
+                                genresInput.placeholder = "No suggestions found";
+                                setTimeout(function () { genresInput.placeholder = originalPlaceholder; }, 3000);
+                            }
+                        } catch (err) {
+                            genresInput.placeholder = "Suggestion failed — try again";
+                            setTimeout(function () { genresInput.placeholder = originalPlaceholder; }, 3000);
+                        } finally {
+                            suggestBtn.disabled = false;
+                            suggestBtn.textContent = originalLabel;
+                        }
+                    })();
+                }
+            });
+
+            document.addEventListener("submit", async function (event) {
+                const form = event.target;
+                if (!form.matches("form.book-info-edit")) return;
+                event.preventDefault();
+                const card = form.closest(".book-info-card");
+                const submitButton = form.querySelector('button[type="submit"]');
+                if (submitButton) {
+                    submitButton.disabled = true;
+                    submitButton.dataset.originalLabel = submitButton.textContent;
+                    submitButton.textContent = "Saving…";
+                }
+                try {
+                    const response = await fetch(form.action, {
+                        method: "POST",
+                        headers: { "X-Requested-With": "XMLHttpRequest" },
+                        body: new FormData(form),
+                    });
+                    const data = await response.json();
+                    if (!response.ok) {
+                        throw new Error(data.error || "Save failed.");
+                    }
+                    syncBookCard(card, data);
+                } catch (err) {
+                    window.alert(err.message || "Save failed.");
+                } finally {
+                    if (submitButton) {
+                        submitButton.disabled = false;
+                        submitButton.textContent = submitButton.dataset.originalLabel || "Save";
+                    }
+                }
+            });
+
+            async function loadNextBooksPage() {
+                if (!booksPage || !bookTableBody) return;
+                if (booksPage.dataset.loading === "1" || booksPage.dataset.hasMore !== "1") return;
+                const nextPageNum = parseInt(booksPage.dataset.nextPageNum || "0", 10);
+                if (!nextPageNum) return;
+
+                booksPage.dataset.loading = "1";
+                if (bookPaginationLoading) bookPaginationLoading.hidden = false;
+
+                try {
+                    const nextUrl = new URL(window.location.href);
+                    nextUrl.searchParams.set("page_num", String(nextPageNum));
+                    const response = await fetch(nextUrl.toString(), {
+                        headers: { "X-Requested-With": "XMLHttpRequest" },
+                    });
+                    if (!response.ok) throw new Error("HTTP " + response.status);
+                    const html = await response.text();
+                    const doc = new DOMParser().parseFromString(html, "text/html");
+                    const nextBody = doc.querySelector(".book-table tbody");
+                    if (nextBody) {
+                        Array.from(nextBody.children).forEach(function (row) {
+                            bookTableBody.appendChild(document.importNode(row, true));
+                        });
+                    }
+
+                    const nextPage = doc.querySelector(".book-list-page");
+                    if (nextPage && booksPage) {
+                        booksPage.dataset.nextPageNum = nextPage.dataset.nextPageNum || String(nextPageNum + 1);
+                        booksPage.dataset.hasMore = nextPage.dataset.hasMore || "0";
+                        booksPage.dataset.totalBooks = nextPage.dataset.totalBooks || booksPage.dataset.totalBooks || "0";
+                        const nextMeta = doc.getElementById("bookPaginationMeta");
+                        if (nextMeta && bookPaginationMeta) {
+                            bookPaginationMeta.textContent = nextMeta.textContent || bookPaginationMeta.textContent;
+                        } else if (bookPaginationMeta) {
+                            const totalBooks = parseInt(booksPage.dataset.totalBooks || "0", 10);
+                            bookPaginationMeta.textContent = "Showing " + getBookRows().length + " of " + totalBooks + " books";
+                        }
+                    }
+
                     applyPageSearch();
-                });
+                    refreshBulkSuggestCount();
+
+                    if (booksPage.dataset.hasMore !== "1" && bookLoadObserver) {
+                        bookLoadObserver.disconnect();
+                    }
+                } catch (err) {
+                    console.error("Failed to load more books:", err);
+                } finally {
+                    booksPage.dataset.loading = "0";
+                    if (bookPaginationLoading) bookPaginationLoading.hidden = true;
+                }
+            }
+
+            if (bookScrollSentinel && "IntersectionObserver" in window && booksPage && booksPage.dataset.hasMore === "1") {
+                bookLoadObserver = new IntersectionObserver(function (entries) {
+                    entries.forEach(function (entry) {
+                        if (entry.isIntersecting) {
+                            loadNextBooksPage();
+                        }
+                    });
+                }, { rootMargin: "900px 0px" });
+                bookLoadObserver.observe(bookScrollSentinel);
             }
 
             const hash = window.location.hash;
@@ -353,25 +515,6 @@
                     });
                 }
             }
-
-            // Inline edit toggle
-            document.querySelectorAll(".js-edit-toggle").forEach(function (btn) {
-                btn.addEventListener("click", function () {
-                    const card = btn.closest(".book-info-card");
-                    card.querySelector(".js-display").hidden = true;
-                    card.querySelector(".js-edit").hidden = false;
-                    btn.hidden = true;
-                });
-            });
-            document.querySelectorAll(".js-edit-cancel").forEach(function (btn) {
-                btn.addEventListener("click", function () {
-                    const card = btn.closest(".book-info-card");
-                    card.querySelector(".js-display").hidden = false;
-                    card.querySelector(".js-edit").hidden = true;
-                    const toggle = card.querySelector(".js-edit-toggle");
-                    if (toggle) toggle.hidden = false;
-                });
-            });
 
             function syncBookCard(card, data) {
                 if (!card || !data) return;
@@ -466,38 +609,6 @@
                 }
             }
 
-            document.querySelectorAll("form.book-info-edit").forEach(function (form) {
-                form.addEventListener("submit", async function (event) {
-                    event.preventDefault();
-                    const card = form.closest(".book-info-card");
-                    const submitButton = form.querySelector('button[type="submit"]');
-                    if (submitButton) {
-                        submitButton.disabled = true;
-                        submitButton.dataset.originalLabel = submitButton.textContent;
-                        submitButton.textContent = "Saving…";
-                    }
-                    try {
-                        const response = await fetch(form.action, {
-                            method: "POST",
-                            headers: { "X-Requested-With": "XMLHttpRequest" },
-                            body: new FormData(form),
-                        });
-                        const data = await response.json();
-                        if (!response.ok) {
-                            throw new Error(data.error || "Save failed.");
-                        }
-                        syncBookCard(card, data);
-                    } catch (err) {
-                        window.alert(err.message || "Save failed.");
-                    } finally {
-                        if (submitButton) {
-                            submitButton.disabled = false;
-                            submitButton.textContent = submitButton.dataset.originalLabel || "Save";
-                        }
-                    }
-                });
-            });
-
             // Bulk: suggest genres for every row whose genres column is empty.
             (function setupBulkSuggest() {
                 const bulkBtn = document.getElementById("bulk-suggest-btn");
@@ -510,11 +621,8 @@
                 let cancelled = false;
                 let running = false;
 
-                function emptyRows() {
-                    return Array.from(document.querySelectorAll('tr.book-row[data-needs-genres="1"]'));
-                }
                 function refreshCount() {
-                    countEl.textContent = String(emptyRows().length);
+                    countEl.textContent = String(document.querySelectorAll('tr.book-row[data-needs-genres="1"]').length);
                 }
                 refreshCount();
 
@@ -524,7 +632,7 @@
                         bulkBtn.textContent = "Cancelling…";
                         return;
                     }
-                    const rows = emptyRows();
+                    const rows = Array.from(document.querySelectorAll('tr.book-row[data-needs-genres="1"]'));
                     if (!rows.length) {
                         statusEl.textContent = "No empty rows to suggest for.";
                         return;
@@ -560,7 +668,6 @@
                             });
                             if (!saveRes.ok) throw new Error("save HTTP " + saveRes.status);
                             // Update the visible display + edit form value + row marker.
-                            const displayDd = row.querySelector('.book-info-pair dt + dd');
                             const allDds = row.querySelectorAll('.book-info-pair');
                             allDds.forEach(function (pair) {
                                 const dt = pair.querySelector('dt');
@@ -588,47 +695,6 @@
                     cancelled = false;
                 });
             })();
-
-            // Suggest genres button (delegated — one form per book row)
-            document.querySelectorAll(".js-suggest-genres").forEach(function (btn) {
-                btn.addEventListener("click", async function () {
-                    const form = btn.closest("form");
-                    if (!form) return;
-                    const titleInput = form.querySelector('[name="book"]');
-                    const genresInput = form.querySelector('[name="genres"]');
-                    if (!titleInput || !genresInput) return;
-                    const title = (titleInput.value || "").trim();
-                    if (!title) { titleInput.focus(); return; }
-                    const originalLabel = btn.textContent;
-                    const originalPlaceholder = genresInput.placeholder;
-                    btn.disabled = true;
-                    btn.textContent = "…";
-                    try {
-                        const response = await fetch("/api/infer_genres", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ title: title }),
-                        });
-                        if (!response.ok) throw new Error("HTTP " + response.status);
-                        const data = await response.json();
-                        const genres = (data.suggestions || [])
-                            .map(function (s) { return s.genre; })
-                            .filter(Boolean);
-                        if (genres.length) {
-                            genresInput.value = genres.join(", ");
-                        } else {
-                            genresInput.placeholder = "No suggestions found";
-                            setTimeout(function () { genresInput.placeholder = originalPlaceholder; }, 3000);
-                        }
-                    } catch (err) {
-                        genresInput.placeholder = "Suggestion failed — try again";
-                        setTimeout(function () { genresInput.placeholder = originalPlaceholder; }, 3000);
-                    } finally {
-                        btn.disabled = false;
-                        btn.textContent = originalLabel;
-                    }
-                });
-            });
         });
     </script>
 {% endblock %}
