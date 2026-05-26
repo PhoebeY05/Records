@@ -66,47 +66,60 @@
 
         <h1 class="title mb-4">{{title}}</h1>
 
-        <form action="{{page}}" method="post" name="options" class="book-list-filters mb-3">
-            <div class="row g-2 align-items-stretch">
-                <div class="col-12 col-md">
-                    {% set existence_label = {'series': 'Series', 'notes': 'Notes', 'genres': 'Genres'}.get(selected_existence, '') %}
-                    <select class="form-select grey {% if selected_existence %}filter-active{% endif %}" name="filter" onchange="this.form.submit()" aria-label="Filter by existence of">
-                        <option value="">{% if existence_label %}Existence: {{ existence_label }}{% else %}Filter by existence of...{% endif %}</option>
-                        <option value="series" {% if selected_existence == "series" %}selected{% endif %}>Series</option>
-                        <option value="notes" {% if selected_existence == "notes" %}selected{% endif %}>Notes</option>
-                        <option value="genres" {% if selected_existence == "genres" %}selected{% endif %}>Genres</option>
-                    </select>
+        <div class="book-controls mb-3">
+            <div class="d-flex flex-column flex-md-row gap-3 align-items-start">
+                <div class="flex-grow-1">
+                    <label class="visually-hidden" for="bookPageSearch">Search books on this page</label>
+                    <div class="d-flex gap-2 align-items-center">
+                        <input id="bookPageSearch" type="search" class="form-control book-page-search-input" placeholder="Search titles, notes, genres, or series..." autocomplete="off">
+                    </div>
+                    <div class="book-page-search-meta grey-text mt-2 sr-only" id="bookPageSearchMeta" aria-live="polite" data-default-help="Searches titles, notes, genres, and series on this page.">Searches titles, notes, genres, and series on this page.</div>
                 </div>
-                <div class="col-12 col-md">
-                    <select class="form-select grey {% if selected_status %}filter-active{% endif %}" name="status_filter" onchange="this.form.submit()" aria-label="Filter by status">
-                        <option value="">{% if selected_status %}Status: {{ selected_status }}{% else %}Filter by status...{% endif %}</option>
-                        {% for s in status_options %}
-                            <option value="{{s}}" {% if selected_status == s %}selected{% endif %}>{{s}}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                {% if page == "/completed" %}
-                <div class="col-12 col-md">
-                    <select class="form-select grey {% if selected_reread %}filter-active{% endif %}" name="reread_filter" onchange="this.form.submit()" aria-label="Filter by rereads">
-                        <option value="">{% if selected_reread != "" %}Rereads: {{ selected_reread }}{% else %}Filter by rereads...{% endif %}</option>
-                        {% for n in reread_options %}
-                            <option value="{{n}}" {% if selected_reread == n|string %}selected{% endif %}>{{n}} reread{{ '' if n == 1 else 's' }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                {% endif %}
-                <div class="col-12 col-md-auto">
-                    <button type="submit" name="clear" value="1" class="btn hidden-info clear-filter-btn w-100">Clear filter</button>
+                <div class="d-flex align-items-center gap-2 ms-md-3">
+                    <div id="bulk-suggest-bar">
+                        <button type="button" class="btn btn-outline-secondary" id="bulk-suggest-btn">
+                            Suggest genres for all empty rows
+                            (<span id="bulk-suggest-empty-count">0</span>)
+                        </button>
+                        <span id="bulk-suggest-status" class="grey-text ms-2" aria-live="polite"></span>
+                    </div>
                 </div>
             </div>
-        </form>
 
-        <div class="d-flex flex-wrap align-items-center gap-2 mb-3" id="bulk-suggest-bar">
-            <button type="button" class="btn btn-outline-secondary" id="bulk-suggest-btn">
-                Suggest genres for all empty rows
-                (<span id="bulk-suggest-empty-count">0</span>)
-            </button>
-            <span id="bulk-suggest-status" class="grey-text" aria-live="polite"></span>
+            <form action="{{page}}" method="post" name="options" class="book-list-filters mt-3">
+                <div class="row g-2 align-items-stretch">
+                    <div class="col-12 col-md">
+                        {% set existence_label = {'series': 'Series', 'notes': 'Notes', 'genres': 'Genres'}.get(selected_existence, '') %}
+                        <select class="form-select grey {% if selected_existence %}filter-active{% endif %}" name="filter" onchange="this.form.submit()" aria-label="Filter by existence of">
+                            <option value="">{% if existence_label %}Existence: {{ existence_label }}{% else %}Filter by existence of...{% endif %}</option>
+                            <option value="series" {% if selected_existence == "series" %}selected{% endif %}>Series</option>
+                            <option value="notes" {% if selected_existence == "notes" %}selected{% endif %}>Notes</option>
+                            <option value="genres" {% if selected_existence == "genres" %}selected{% endif %}>Genres</option>
+                        </select>
+                    </div>
+                    <div class="col-12 col-md">
+                        <select class="form-select grey {% if selected_status %}filter-active{% endif %}" name="status_filter" onchange="this.form.submit()" aria-label="Filter by status">
+                            <option value="">{% if selected_status %}Status: {{ selected_status }}{% else %}Filter by status...{% endif %}</option>
+                            {% for s in status_options %}
+                                <option value="{{s}}" {% if selected_status == s %}selected{% endif %}>{{s}}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% if page == "/completed" %}
+                    <div class="col-12 col-md">
+                        <select class="form-select grey {% if selected_reread %}filter-active{% endif %}" name="reread_filter" onchange="this.form.submit()" aria-label="Filter by rereads">
+                            <option value="">{% if selected_reread != "" %}Rereads: {{ selected_reread }}{% else %}Filter by rereads...{% endif %}</option>
+                            {% for n in reread_options %}
+                                <option value="{{n}}" {% if selected_reread == n|string %}selected{% endif %}>{{n}} reread{{ '' if n == 1 else 's' }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% endif %}
+                    <div class="col-12 col-md-auto">
+                        <button type="submit" name="clear" value="1" class="btn hidden-info clear-filter-btn w-100">Clear filter</button>
+                    </div>
+                </div>
+            </form>
         </div>
 
         <div class="table-responsive-wrap">
@@ -124,7 +137,7 @@
                 <tbody>
                     {% for book in books %}
                         {% set collapse_id = 'book-info-' ~ book.id %}
-                        <tr id="book-{{ book.id }}" class="book-row" data-book-id="{{ book.id }}" data-book-title="{{ book.book }}" data-needs-genres="{% if not book.genres or book.genres == 'None' %}1{% else %}0{% endif %}">
+                        <tr id="book-{{ book.id }}" class="book-row" data-book-id="{{ book.id }}" data-book-title="{{ book.book }}" data-needs-genres="{% if not book.genres or book.genres == 'None' %}1{% else %}0{% endif %}" data-search-text="{{ ((book.book or '') ~ ' ' ~ (book.status or '') ~ ' ' ~ (book.date or '') ~ ' ' ~ (book.genres or '') ~ ' ' ~ (book.series or '') ~ ' ' ~ (book.notes or '')) | lower }}">
                             <td class="col-action">
                                 {% block checked scoped %}{% endblock %}
                             </td>
@@ -225,6 +238,17 @@
             </table>
         </div>
 
+        {% if total_books is defined and total_books > 0 %}
+        <div class="book-pagination d-flex flex-column flex-md-row justify-content-between align-items-center gap-2 mt-3">
+            <div class="book-pagination-meta grey-text">
+                Showing {{ showing_start }}-{{ showing_end }} of {{ total_books }} books
+            </div>
+            {% if has_more %}
+            <a class="btn btn-outline-secondary book-pagination-more" href="{{ page }}?page_num={{ next_page_num }}">Load more</a>
+            {% endif %}
+        </div>
+        {% endif %}
+
         {% if books|length == 0 %}
             <p class="grey-text text-center my-5">No books yet — add one or import a file to get started.</p>
         {% endif %}
@@ -240,11 +264,13 @@
         document.addEventListener("DOMContentLoaded", function () {
             function showInfoRow(infoRow) {
                 infoRow.hidden = false;
+                infoRow.dataset.open = "1";
                 const button = document.querySelector('.js-book-toggle[data-target="' + infoRow.id + '"]');
                 if (button) button.setAttribute("aria-expanded", "true");
             }
             function hideInfoRow(infoRow) {
                 infoRow.hidden = true;
+                infoRow.dataset.open = "0";
                 const button = document.querySelector('.js-book-toggle[data-target="' + infoRow.id + '"]');
                 if (button) button.setAttribute("aria-expanded", "false");
             }
@@ -257,6 +283,57 @@
                     else hideInfoRow(target);
                 });
             });
+
+            const bookPageSearch = document.getElementById("bookPageSearch");
+            const bookPageSearchClear = document.getElementById("bookPageSearchClear");
+            const bookPageSearchMeta = document.getElementById("bookPageSearchMeta");
+            const bookRows = Array.from(document.querySelectorAll("tr.book-row"));
+
+            function updateSearchMeta(visibleCount, query) {
+                if (!bookPageSearchMeta) return;
+                if (!query) {
+                    bookPageSearchMeta.textContent = bookPageSearchMeta.dataset.defaultHelp || "";
+                    return;
+                }
+                bookPageSearchMeta.textContent = visibleCount + " match" + (visibleCount === 1 ? "" : "es") + " on this page";
+            }
+
+            function applyPageSearch() {
+                if (!bookPageSearch) return;
+                const query = (bookPageSearch.value || "").trim().toLowerCase();
+                let visibleCount = 0;
+                bookRows.forEach(function (row) {
+                    const infoRow = document.getElementById("book-info-" + row.dataset.bookId);
+                    const haystack = row.dataset.searchText || "";
+                    const match = !query || haystack.includes(query);
+                    row.hidden = !match;
+                    if (infoRow) {
+                        if (!match) {
+                            infoRow.hidden = true;
+                        } else {
+                            infoRow.hidden = infoRow.dataset.open !== "1";
+                        }
+                    }
+                    if (match) visibleCount++;
+                });
+                updateSearchMeta(visibleCount, query);
+                if (bookPageSearchClear) {
+                    bookPageSearchClear.disabled = !query;
+                }
+            }
+
+            if (bookPageSearch) {
+                bookPageSearch.addEventListener("input", applyPageSearch);
+                applyPageSearch();
+            }
+            if (bookPageSearchClear) {
+                bookPageSearchClear.addEventListener("click", function () {
+                    if (!bookPageSearch) return;
+                    bookPageSearch.value = "";
+                    bookPageSearch.focus();
+                    applyPageSearch();
+                });
+            }
 
             const hash = window.location.hash;
             if (hash && hash.startsWith("#book-")) {

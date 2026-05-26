@@ -38,9 +38,9 @@ except Exception:
 
 _SEARCH_RESULTS_CACHE = {}
 _genre_model = None
-
 app = Flask(__name__)
 BOOK_PAGES = {"completed", "unfinished", "tbr"}
+BOOK_PAGE_SIZE = 50
 DATE_FORMATS = ["%d %B %Y", "%d %b %Y"]
 
 
@@ -165,8 +165,8 @@ def get_reread_options(user_id):
     return [r["reread"] for r in rows]
 
 
-def query_books_with_filters(category, user_id, status_filter=None, existence_filter=None, reread_filter=None):
-    query = f"SELECT * FROM {category} WHERE user_id = ?"
+def _build_books_filter_clause(category, user_id, status_filter=None, existence_filter=None, reread_filter=None):
+    query = f"FROM {category} WHERE user_id = ?"
     params = [user_id]
     if status_filter:
         query += " AND status = ?"
@@ -181,10 +181,25 @@ def query_books_with_filters(category, user_id, status_filter=None, existence_fi
             params.append(reread_value)
     if existence_filter in ("genres", "series", "notes"):
         query += f" AND {existence_filter} IS NOT NULL AND {existence_filter} != ''"
-        query += f" ORDER BY {existence_filter}"
+        order_clause = f" ORDER BY {existence_filter}"
     else:
-        query += " ORDER BY date DESC, id DESC"
-    return db.execute(query, *params)
+        order_clause = " ORDER BY date DESC, id DESC"
+    return query, params, order_clause
+
+
+def query_books_with_filters(category, user_id, status_filter=None, existence_filter=None, reread_filter=None, limit=None, offset=0):
+    query, params, order_clause = _build_books_filter_clause(category, user_id, status_filter, existence_filter, reread_filter)
+    sql = f"SELECT * {query}{order_clause}"
+    if limit is not None:
+        sql += " LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+    return db.execute(sql, *params)
+
+
+def count_books_with_filters(category, user_id, status_filter=None, existence_filter=None, reread_filter=None):
+    query, params, _ = _build_books_filter_clause(category, user_id, status_filter, existence_filter, reread_filter)
+    rows = db.execute(f"SELECT COUNT(*) AS count {query}", *params)
+    return rows[0]["count"] if rows else 0
 
 
 def sanitize_import_text(text):
@@ -1153,63 +1168,117 @@ def _genres_from_goodreads(url):
 def _genres_from_qidian(url):
     """Best-effort genre extraction from Qidian (起点).
 
-    Qidian aggressively challenges headless browsers — many requests come back
-    as 202 with an empty body. The handler tries a couple of common selectors
-    and returns an empty list when the challenge wins.
+    Qidian's desktop pages are often protected, but the mobile book page is
+    publicly readable and carries the genre/category links we need.
     """
-    if sync_playwright is None:
+    mobile_url = _normalize_qidian_book_url(url)
+    if not mobile_url:
         return []
-    chrome_path = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+
     try:
-        with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(
-                headless=True,
-                executable_path=chrome_path if os.path.exists(chrome_path) else None,
-            )
-            try:
-                page = browser.new_page(user_agent=DESKTOP_UA, locale="zh-CN")
-                response = page.goto(url, wait_until="domcontentloaded", timeout=20000)
-                if response is not None and response.status >= 400:
-                    return []
-                page.wait_for_timeout(5000)
-                tags = page.evaluate(
-                    """() => {
-                        const out = [];
-                        const selectors = [
-                            '.crumb a',
-                            '.book-info-detail .tag a',
-                            '.book-information .crumb a',
-                            '.all-attr a',
-                            '.book-attribute .all-attr a',
-                            'a[href*="chanId"]',
-                        ];
-                        for (const sel of selectors) {
-                            document.querySelectorAll(sel).forEach(el => {
-                                const text = (el.innerText || '').trim();
-                                if (text) out.push(text);
-                            });
-                            if (out.length) break;
-                        }
-                        return out;
-                    }"""
-                )
-            finally:
-                browser.close()
+        response = requests.get(
+            mobile_url,
+            headers={"User-Agent": DESKTOP_UA},
+            timeout=12,
+        )
+        response.raise_for_status()
     except Exception:
         return []
 
-    drop = {"首页", "全部作品", "完本作品", "网络小说", "起点中文网", "免费小说"}
+    soup = BeautifulSoup(response.text, "html.parser")
+    candidates = []
     seen = set()
-    out = []
-    for t in tags:
-        if not t or t in drop:
-            continue
-        key = t.casefold()
+
+    def add_candidate(text):
+        cleaned = _clean_qidian_genre_candidate(text)
+        if not cleaned:
+            return
+        key = cleaned.casefold()
         if key in seen:
-            continue
+            return
         seen.add(key)
-        out.append(t)
-    return out[:5]
+        candidates.append(cleaned)
+
+    for anchor in soup.select('a[href*="/category/"]'):
+        add_candidate(anchor.get_text(" ", strip=True))
+
+    lines = [line.strip() for line in soup.get_text("\n", strip=True).splitlines() if line.strip()]
+    for line in lines:
+        if line in {"简介", "目录", "更多角色", "书友圈", "包含本书的书单"}:
+            continue
+        if any(token in line for token in ("更新时间", "万字", "书友", "章节", "收藏", "登录", "下载", "App")):
+            continue
+        if re.search(r"[·|/、,，]", line):
+            for part in re.split(r"[·|/、,，]+", line):
+                add_candidate(part)
+
+    try:
+        intro_index = lines.index("简介")
+    except ValueError:
+        intro_index = -1
+    if intro_index >= 0:
+        for line in lines[intro_index + 1 : intro_index + 10]:
+            if len(line) > 12:
+                break
+            add_candidate(line)
+
+    return candidates[:6]
+
+
+def _normalize_qidian_book_url(url):
+    if not url:
+        return ""
+    parsed = urlparse(url)
+    if "qidian.com" not in (parsed.netloc or ""):
+        return url
+    match = re.search(r"/book/(\d+)/?", parsed.path or "")
+    if not match:
+        return url
+    return f"https://m.qidian.com/book/{match.group(1)}/"
+
+
+def _clean_qidian_genre_candidate(text):
+    cleaned = sanitize_import_text(unescape(text or "")).strip()
+    if not cleaned:
+        return ""
+
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    cleaned = cleaned.strip(" \t\r\n·|/、,，:-：")
+    if not cleaned:
+        return ""
+
+    if any(
+        token in cleaned
+        for token in (
+            "更新时间",
+            "万字",
+            "书友",
+            "章节",
+            "收藏",
+            "登录",
+            "下载",
+            "更多",
+            "简介",
+            "目录",
+            "App",
+            "起点中文网",
+            "网络小说",
+            "小说推荐",
+        )
+    ):
+        return ""
+
+    if "…" in cleaned or "..." in cleaned:
+        return ""
+
+    if cleaned.endswith("小说") and len(cleaned) > 2:
+        cleaned = cleaned[:-2]
+
+    if len(cleaned) > 20:
+        return ""
+    if not re.search(r"[\w\u4e00-\u9fff]", cleaned):
+        return ""
+    return cleaned
 
 
 def _find_mal_url(title):
@@ -1456,7 +1525,7 @@ def infer_genres(title, summary=None, top_k=3):
         return (url, _genres_from_qidian(url)) if url else None
 
     if _contains_cjk(base_query):
-        steps = (_jjwxc_step, _qidian_step)
+        steps = (_qidian_step, _jjwxc_step)
     else:
         steps = (_goodreads_step, _mal_step)
 
@@ -2512,6 +2581,7 @@ def render_category_page(category, template_name):
         session["selected"] = []
     # Load previously-saved filters for this category
     saved_filters = session.get("filters", {}).get(category, {})
+    page_num = 1
 
     if request.method == "POST":
         # Clear filters when requested
@@ -2535,18 +2605,32 @@ def render_category_page(category, template_name):
                 "existence_filter": existence_filter,
                 "reread_filter": reread_filter,
             }
+        page_num = 1
     else:
         status_filter = saved_filters.get("status_filter", "")
         existence_filter = saved_filters.get("existence_filter", "")
         reread_filter = saved_filters.get("reread_filter", "")
+        try:
+            page_num = max(1, int(request.args.get("page_num", 1)))
+        except (TypeError, ValueError):
+            page_num = 1
 
-    if status_filter or existence_filter or reread_filter:
-        books = query_books_with_filters(category, session["user_id"], status_filter, existence_filter, reread_filter)
-    else:
-        books = db.execute(
-            f"SELECT * FROM {category} WHERE user_id = ? ORDER BY date DESC, id DESC",
-            session["user_id"],
-        )
+    total_books = count_books_with_filters(category, session["user_id"], status_filter, existence_filter, reread_filter)
+    max_page = max(1, math.ceil(total_books / BOOK_PAGE_SIZE)) if total_books else 1
+    page_num = min(page_num, max_page)
+    offset = (page_num - 1) * BOOK_PAGE_SIZE
+    books = query_books_with_filters(
+        category,
+        session["user_id"],
+        status_filter,
+        existence_filter,
+        reread_filter,
+        limit=BOOK_PAGE_SIZE,
+        offset=offset,
+    )
+    has_more = offset + len(books) < total_books
+    showing_start = offset + 1 if books else 0
+    showing_end = offset + len(books)
 
     return render_template(
         template_name,
@@ -2557,6 +2641,13 @@ def render_category_page(category, template_name):
         selected_reread=reread_filter,
         status_options=get_status_options(category, session["user_id"]),
         reread_options=get_reread_options(session["user_id"]) if category == "completed" else [],
+        page_num=page_num,
+        has_more=has_more,
+        total_books=total_books,
+        showing_start=showing_start,
+        showing_end=showing_end,
+        next_page_num=page_num + 1,
+        page_size=BOOK_PAGE_SIZE,
     )
 
 
@@ -3796,7 +3887,7 @@ def compute_analytics(user_id):
             }
         )
 
-    completion_rate = round(total_completed * 100 / total_books, 1) if total_books else 0
+    completion_rate = round(total_completed * 100 / (total_unfinished + total_completed), 1) if total_books else 0
     genre_coverage = round(completed_with_genres * 100 / total_completed, 1) if total_completed else 0
     series_coverage = round(completed_with_series * 100 / total_completed, 1) if total_completed else 0
     reread_share = round(reread_books * 100 / total_completed, 1) if total_completed else 0
