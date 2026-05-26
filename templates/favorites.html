@@ -1,0 +1,73 @@
+{% extends "layout.html" %}
+
+{% block title %}Favorites{% endblock %}
+
+{% block main %}
+<div class="container book-list-page mt-4">
+    {% for msg in get_flashed_messages() %}
+    <div class="alert alert-info alert-dismissible fade show" role="alert">
+        {{msg}}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endfor %}
+
+    <h1 class="title mb-2">Favorites</h1>
+    <p class="grey-text mb-4">{{ total }} favorited book{{ '' if total == 1 else 's' }} across all categories.</p>
+
+    {% if total == 0 %}
+        <p class="grey-text text-center my-5">No favorites yet — tap the star next to a book on any list to add it here.</p>
+    {% endif %}
+
+    {% for section in sections %}
+        {% if section.books|length > 0 %}
+        <section class="favorites-section mb-5">
+            <div class="favorites-section-header">
+                <h2 class="favorites-section-title">{{ section.label }}</h2>
+                <a href="/{{ section.category }}" class="favorites-section-link">Go to {{ section.label }} →</a>
+                <span class="favorites-section-count">{{ section.books|length }}</span>
+            </div>
+            <div class="table-responsive-wrap">
+                <table class="table book-table align-middle">
+                    <thead>
+                        <tr>
+                            <th scope="col" class="col-name">Name</th>
+                            <th scope="col" class="col-status">Status</th>
+                            <th scope="col" class="col-date">Date</th>
+                            <th scope="col" class="col-info">Open</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for book in section.books %}
+                        <tr class="book-row">
+                            <td class="col-name">
+                                <div class="book-name-cell">
+                                    <form action="/favorite/{{ section.category }}/{{ book.id }}" method="post" class="m-0">
+                                        <input type="hidden" name="redirect_to" value="/favorites">
+                                        <button type="submit" class="book-name-favorite is-favorite" aria-pressed="true" aria-label="Unfavorite" title="Unfavorite">
+                                            <span aria-hidden="true">★</span>
+                                        </button>
+                                    </form>
+                                    <span class="book-name">{{ book.book }}</span>
+                                </div>
+                            </td>
+                            <td class="col-status">
+                                {% if book.status %}
+                                <span class="book-status-badge">{{ book.status }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="col-date">
+                                <span class="book-date">{{ book.date }}</span>
+                            </td>
+                            <td class="col-info">
+                                <a class="btn btn-outline-secondary btn-sm" href="/{{ section.category }}#book-{{ book.id }}">View</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+        {% endif %}
+    {% endfor %}
+</div>
+{% endblock %}

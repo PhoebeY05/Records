@@ -129,6 +129,11 @@
                             </td>
                             <td class="col-name">
                                 <div class="book-name-cell">
+                                    <form action="/favorite/{{ page.lstrip('/') }}/{{ book.id }}" method="post" class="m-0">
+                                        <button type="submit" class="book-name-favorite {% if book.favorite %}is-favorite{% endif %}" aria-pressed="{{ 'true' if book.favorite else 'false' }}" aria-label="{% if book.favorite %}Unfavorite{% else %}Favorite{% endif %}" title="{% if book.favorite %}Unfavorite{% else %}Mark as favorite{% endif %}">
+                                            <span aria-hidden="true">{% if book.favorite %}★{% else %}☆{% endif %}</span>
+                                        </button>
+                                    </form>
                                     <span class="book-name">{{book.book}}</span>
                                     <form action="/delete" method="post" class="m-0">
                                         <button class="book-name-delete" type="submit" name="book" value="{{book.id}}" aria-label="Delete">

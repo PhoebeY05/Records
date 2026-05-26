@@ -1076,6 +1076,31 @@ a:hover
     background: rgba(107, 15, 26, 0.08);
 }
 
+.book-name-favorite {
+    flex: 0 0 auto;
+    background: transparent;
+    border: 0;
+    padding: 0.1rem 0.35rem;
+    border-radius: 8px;
+    font-size: 1.35rem;
+    line-height: 1;
+    color: #b8b8b8;
+    transition: background-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+}
+
+.book-name-favorite:hover {
+    background: rgba(214, 167, 38, 0.18);
+    color: #c89a16;
+}
+
+.book-name-favorite:active {
+    transform: scale(0.92);
+}
+
+.book-name-favorite.is-favorite {
+    color: #d6a726;
+}
+
 .book-status-badge {
     display: inline-block;
     padding: 0.25rem 0.6rem;
@@ -3178,3 +3203,39 @@ a:hover
         text-align: left;
     }
 }
+
+.favorites-section-header {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid rgba(107, 15, 26, 0.15);
+}
+
+.favorites-section-title {
+    font-family: 'Georgia';
+    color: #31081F;
+    margin: 0;
+    font-size: 1.5rem;
+}
+
+.favorites-section-count {
+    font-family: 'Georgia';
+    color: #595959;
+    font-size: 0.95rem;
+    margin-left: auto;
+}
+
+.favorites-section-link {
+    font-family: 'Georgia';
+    color: #6B0F1A;
+    font-size: 0.9rem;
+    text-decoration: none;
+}
+
+.favorites-section-link:hover {
+    text-decoration: underline;
+}
+

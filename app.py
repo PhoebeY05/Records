@@ -81,6 +81,7 @@ def ensure_schema():
             notes TEXT,
             genres TEXT,
             series TEXT,
+            favorite INTEGER NOT NULL DEFAULT 0,
             FOREIGN KEY (user_id) REFERENCES users(id)
         )
         """
@@ -97,6 +98,7 @@ def ensure_schema():
             genres TEXT,
             status TEXT NOT NULL DEFAULT 'Finished',
             series TEXT,
+            favorite INTEGER NOT NULL DEFAULT 0,
             FOREIGN KEY (user_id) REFERENCES users(id)
         )
         """
@@ -115,6 +117,7 @@ def ensure_schema():
             genres TEXT,
             status TEXT NOT NULL DEFAULT 'Finished',
             series TEXT,
+            favorite INTEGER NOT NULL DEFAULT 0,
             FOREIGN KEY (user_id) REFERENCES users(id)
         )
         """
@@ -1540,6 +1543,21 @@ def merge_notes(note_parts):
     return "; ".join(merged)
 
 
+def strip_reread_phrase(text):
+    if not text:
+        return text
+    cleaned = re.sub(
+        r"(?i)\bread\s+(?:first|second|third|fourth|\d+(?:st|nd|rd|th)?)\s+times?\b",
+        "",
+        text,
+    )
+    cleaned = re.sub(r"\s*;\s*;\s*", "; ", cleaned)
+    cleaned = re.sub(r"\s{2,}", " ", cleaned)
+    cleaned = re.sub(r"\s*([,;])\s*", r"\1 ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned)
+    return cleaned.strip(" ;,-")
+
+
 def find_existing_book_row(table, user_id, title, columns):
     target_key = normalize_book_key(title)
     rows = db.execute(f"SELECT {columns} FROM {table} WHERE user_id = ?", user_id)
@@ -1591,12 +1609,11 @@ def extract_reread_count(text):
 def parse_common_metadata(text):
     notes = []
     series = None
+    favorite = 1 if "✔" in text else 0
 
     notes.extend([n.strip() for n in re.findall(r"\*(.*?)\*", text) if n.strip()])
     notes.extend([n.strip() for n in re.findall(r"[\{｛](.*?)[\}｝]", text) if n.strip()])
 
-    if "✔" in text:
-        notes.append("Favorite")
     if re.search(r"#nice\b", text, flags=re.IGNORECASE):
         notes.append("Would recommend to others")
 
@@ -1608,7 +1625,7 @@ def parse_common_metadata(text):
     if series_match:
         series = f"Series {series_match.group(1)}"
 
-    return notes, series
+    return notes, series, favorite
 
 
 def clean_freeform_note(text):
@@ -1618,6 +1635,7 @@ def clean_freeform_note(text):
     cleaned = re.sub(r"#nice\b", "", cleaned, flags=re.IGNORECASE)
     cleaned = re.sub(r"}\s*\d+", "", cleaned)
     cleaned = re.sub(r"作者[:：]\s*[^\]\)）\}]+", "", cleaned)
+    cleaned = strip_reread_phrase(cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned)
     return cleaned.strip("; -*")
 
@@ -1715,7 +1733,7 @@ def parse_completed_line(line):
     title, title_notes = parse_title(raw_title)
     if not title:
         return None
-    common_notes, series = parse_common_metadata(line)
+    common_notes, series, favorite = parse_common_metadata(line)
 
     notes = []
     notes.extend(title_notes)
@@ -1735,6 +1753,7 @@ def parse_completed_line(line):
         "notes": notes,
         "series": series,
         "reread": extract_reread_count(line),
+        "favorite": favorite,
     }
 
 
@@ -1751,7 +1770,7 @@ def parse_tbr_line(line, status=None):
     if not title:
         return None
 
-    common_notes, series = parse_common_metadata(line)
+    common_notes, series, favorite = parse_common_metadata(line)
     notes = []
     notes.extend(title_notes)
     notes.extend(common_notes)
@@ -1760,6 +1779,7 @@ def parse_tbr_line(line, status=None):
         "book": title,
         "notes": notes,
         "series": series,
+        "favorite": favorite,
     }
 
 
@@ -1827,7 +1847,7 @@ def parse_unfinished_line(line):
     if not title:
         return None
 
-    common_notes, series = parse_common_metadata(cleaned_line)
+    common_notes, series, favorite = parse_common_metadata(cleaned_line)
     notes = []
     if extra:
         notes.append(extra)
@@ -1839,6 +1859,7 @@ def parse_unfinished_line(line):
         "status": status,
         "notes": notes,
         "series": series,
+        "favorite": favorite,
     }
 
 
@@ -1870,20 +1891,22 @@ def undo_import_actions(user_id, actions):
         elif action_type == "update_completed":
             previous = action.get("previous", {})
             db.execute(
-                "UPDATE completed SET reread = ?, notes = ? WHERE id = ? AND user_id = ?",
+                "UPDATE completed SET reread = ?, notes = ?, favorite = ? WHERE id = ? AND user_id = ?",
                 previous.get("reread", 0),
                 previous.get("notes"),
+                previous.get("favorite", 0),
                 row_id,
                 user_id,
             )
         elif action_type == "update_unfinished":
             previous = action.get("previous", {})
             db.execute(
-                "UPDATE unfinished SET status = ?, notes = ?, series = ?, date = ? WHERE id = ? AND user_id = ?",
+                "UPDATE unfinished SET status = ?, notes = ?, series = ?, date = ?, favorite = ? WHERE id = ? AND user_id = ?",
                 previous.get("status"),
                 previous.get("notes"),
                 previous.get("series"),
                 previous.get("date"),
+                previous.get("favorite", 0),
                 row_id,
                 user_id,
             )
@@ -1956,17 +1979,19 @@ def import_completed_books(lines, user_id):
                 existing["date"] = entry["date"]
             existing["notes"].extend(entry["notes"])
             existing["reread"] += 1
+            existing["favorite"] = 1 if (existing.get("favorite") or entry.get("favorite")) else 0
             if not existing["series"] and entry["series"]:
                 existing["series"] = entry["series"]
         else:
             aggregated[key] = entry
 
     for entry in aggregated.values():
-        existing = find_existing_book_row("completed", user_id, entry["book"], "id, reread, notes, book")
+        existing = find_existing_book_row("completed", user_id, entry["book"], "id, reread, notes, book, favorite")
         entry_notes = merge_notes(entry["notes"])
 
         if existing:
             merged = merge_notes([existing[0]["notes"], entry_notes])
+            new_favorite = 1 if (existing[0]["favorite"] or entry.get("favorite")) else 0
             undo_actions.append(
                 {
                     "action": "update_completed",
@@ -1975,13 +2000,15 @@ def import_completed_books(lines, user_id):
                     "previous": {
                         "reread": existing[0]["reread"],
                         "notes": existing[0]["notes"],
+                        "favorite": existing[0]["favorite"],
                     },
                 }
             )
             db.execute(
-                "UPDATE completed SET reread = ?, notes = ? WHERE id = ? AND user_id = ?",
+                "UPDATE completed SET reread = ?, notes = ?, favorite = ? WHERE id = ? AND user_id = ?",
                 existing[0]["reread"] + 1,
                 merged,
+                new_favorite,
                 existing[0]["id"],
                 user_id,
             )
@@ -1999,7 +2026,7 @@ def import_completed_books(lines, user_id):
                 days = 0
 
         book_id = db.execute(
-            "INSERT INTO completed (user_id, book, date, days, notes, reread, status, series) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO completed (user_id, book, date, days, notes, reread, status, series, favorite) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             user_id,
             entry["book"],
             completed_date,
@@ -2008,6 +2035,7 @@ def import_completed_books(lines, user_id):
             entry["reread"],
             "Finished",
             entry["series"],
+            entry.get("favorite", 0),
         )
         insert_combined_row(book_id, user_id, entry["book"], completed_date, "completed")
         undo_actions.append({"action": "insert", "table": "completed", "id": book_id})
@@ -2058,25 +2086,34 @@ def import_tbr_books(lines, user_id):
             pending_notes = []
 
         key = normalize_book_key(entry["book"])
-        if key not in aggregated:
+        if key in aggregated:
+            existing_entry = aggregated[key]
+            existing_entry["favorite"] = 1 if (existing_entry.get("favorite") or entry.get("favorite")) else 0
+        else:
             entry["status"] = current_status
             aggregated[key] = entry
 
     for entry in aggregated.values():
-        existing = find_existing_book_row("tbr", user_id, entry["book"], "id, book")
+        existing = find_existing_book_row("tbr", user_id, entry["book"], "id, favorite, book")
         if existing:
+            if entry.get("favorite") and not existing[0]["favorite"]:
+                db.execute(
+                    "UPDATE tbr SET favorite = 1 WHERE id = ? AND user_id = ?",
+                    existing[0]["id"], user_id,
+                )
             continue
 
         notes_text = merge_notes(entry["notes"])
         book_date = date.today()
         book_id = db.execute(
-            "INSERT INTO tbr (user_id, book, status, date, notes, series) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO tbr (user_id, book, status, date, notes, series, favorite) VALUES (?, ?, ?, ?, ?, ?, ?)",
             user_id,
             entry["book"],
             entry.get("status", "Uncompleted"),
             book_date,
             notes_text,
             entry["series"],
+            entry.get("favorite", 0),
         )
         insert_combined_row(book_id, user_id, entry["book"], book_date, "tbr")
         undo_actions.append({"action": "insert", "table": "tbr", "id": book_id})
@@ -2115,17 +2152,20 @@ def import_unfinished_books(lines, user_id):
             pending_notes = []
 
         key = normalize_book_key(entry["book"])
+        prior = aggregated.get(key)
+        if prior is not None and prior.get("favorite") and not entry.get("favorite"):
+            entry["favorite"] = 1
         aggregated[key] = entry
 
     for entry in aggregated.values():
-        existing = find_existing_book_row("unfinished", user_id, entry["book"], "id, notes, status, series, date, book")
+        existing = find_existing_book_row("unfinished", user_id, entry["book"], "id, notes, status, series, date, book, favorite")
         notes_text = merge_notes(entry["notes"])
         book_date = date.today()
 
         if existing:
             merged = merge_notes([existing[0]["notes"], notes_text])
             previous_row = db.execute(
-                "SELECT status, notes, series, date, book FROM unfinished WHERE id = ? AND user_id = ? LIMIT 1",
+                "SELECT status, notes, series, date, book, favorite FROM unfinished WHERE id = ? AND user_id = ? LIMIT 1",
                 existing[0]["id"],
                 user_id,
             )
@@ -2134,6 +2174,7 @@ def import_unfinished_books(lines, user_id):
                 user_id,
                 existing[0]["id"],
             )
+            new_favorite = 1 if (existing[0]["favorite"] or entry.get("favorite")) else 0
             undo_actions.append(
                 {
                     "action": "update_unfinished",
@@ -2144,17 +2185,19 @@ def import_unfinished_books(lines, user_id):
                         "notes": previous_row[0]["notes"] if previous_row else None,
                         "series": previous_row[0]["series"] if previous_row else None,
                         "date": previous_row[0]["date"] if previous_row else None,
+                        "favorite": previous_row[0]["favorite"] if previous_row else 0,
                         "combined_date": previous_combined[0]["date"] if previous_combined else None,
                         "combined_book": previous_combined[0]["book"] if previous_combined else None,
                     },
                 }
             )
             db.execute(
-                "UPDATE unfinished SET status = ?, notes = ?, series = ?, date = ? WHERE id = ? AND user_id = ?",
+                "UPDATE unfinished SET status = ?, notes = ?, series = ?, date = ?, favorite = ? WHERE id = ? AND user_id = ?",
                 entry["status"],
                 merged,
                 entry["series"],
                 book_date,
+                new_favorite,
                 existing[0]["id"],
                 user_id,
             )
@@ -2169,13 +2212,14 @@ def import_unfinished_books(lines, user_id):
             continue
 
         book_id = db.execute(
-            "INSERT INTO unfinished (user_id, book, date, notes, status, series) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO unfinished (user_id, book, date, notes, status, series, favorite) VALUES (?, ?, ?, ?, ?, ?, ?)",
             user_id,
             entry["book"],
             book_date,
             notes_text,
             entry["status"],
             entry["series"],
+            entry.get("favorite", 0),
         )
         insert_combined_row(book_id, user_id, entry["book"], book_date, "unfinished")
         undo_actions.append({"action": "insert", "table": "unfinished", "id": book_id})
@@ -2190,7 +2234,7 @@ def switch(original, new, book_id):
     book = db.execute(f"SELECT * FROM {original} WHERE id = ? AND user_id = ?", book_id, session["user_id"])
     db.execute(f"DELETE FROM {original} WHERE id = ? AND user_id = ?", book_id, session["user_id"])
     new_id = db.execute(
-        f"INSERT INTO {new} (user_id, book, date, notes, genres, status, series) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        f"INSERT INTO {new} (user_id, book, date, notes, genres, status, series, favorite) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         session["user_id"],
         book[0]["book"],
         today,
@@ -2198,6 +2242,7 @@ def switch(original, new, book_id):
         book[0]["genres"],
         book[0]["status"],
         book[0]["series"],
+        book[0]["favorite"],
     )
     db.execute("UPDATE combined SET id = ?, page = ? WHERE id = ?", new_id, new, book_id)
     if new == "completed":
@@ -2498,6 +2543,31 @@ def render_category_page(category, template_name):
     )
 
 
+@app.route("/favorites")
+def favorites():
+    if not session_user_exists():
+        session.clear()
+        flash("Your session is no longer valid. Please log in again.")
+        return redirect("/")
+
+    section_specs = [
+        ("completed", "Completed"),
+        ("tbr", "To Be Read"),
+        ("unfinished", "Unfinished"),
+    ]
+    sections = []
+    total = 0
+    for category, label in section_specs:
+        books = db.execute(
+            f"SELECT * FROM {category} WHERE user_id = ? AND favorite = 1 ORDER BY date DESC, id DESC",
+            session["user_id"],
+        )
+        total += len(books)
+        sections.append({"category": category, "label": label, "books": books})
+
+    return render_template("favorites.html", sections=sections, total=total)
+
+
 @app.route("/tbr", methods=["GET", "POST"])
 def tbr():
     if request.method == "POST":
@@ -2577,6 +2647,34 @@ def book_detail_api(category, book_id):
     return payload
 
 
+@app.route("/favorite/<category>/<int:book_id>", methods=["POST"])
+def toggle_favorite(category, book_id):
+    if not session_user_exists():
+        session.clear()
+        flash("Your session is no longer valid. Please log in again.")
+        return redirect("/")
+    if category not in BOOK_PAGES:
+        return redirect("/home")
+
+    rows = db.execute(
+        f"SELECT favorite FROM {category} WHERE id = ? AND user_id = ? LIMIT 1",
+        book_id, session["user_id"],
+    )
+    if not rows:
+        flash("That book no longer exists.")
+        return redirect(f"/{category}")
+
+    new_value = 0 if rows[0]["favorite"] else 1
+    db.execute(
+        f"UPDATE {category} SET favorite = ? WHERE id = ? AND user_id = ?",
+        new_value, book_id, session["user_id"],
+    )
+    redirect_to = (request.form.get("redirect_to") or "").strip()
+    if not redirect_to:
+        redirect_to = f"/{category}#book-{book_id}"
+    return redirect(redirect_to)
+
+
 @app.route("/update/<category>/<int:book_id>", methods=["POST"])
 def update_book(category, book_id):
     if not session_user_exists():
@@ -2593,10 +2691,21 @@ def update_book(category, book_id):
     genres = (request.form.get("genres") or "").strip()
     series = (request.form.get("series") or "").strip()
     notes = (request.form.get("notes") or "").strip()
+    reread_raw = (request.form.get("reread") or "").strip()
+    reread = None
+    if category == "completed" and reread_raw != "":
+        try:
+            reread = max(int(reread_raw), 0)
+        except ValueError:
+            flash("Rereads must be a whole number.")
+            return redirect(f"/{category}")
+    elif category == "completed" and reread_raw == "":
+        flash("Rereads cannot be blank.")
+        return redirect(f"/{category}")
 
     if not book_name:
         flash("Book name cannot be empty.")
-        return redirect(f"/{category}#book-{book_id}")
+        return redirect(f"/{category}")
 
     existing = db.execute(
         f"SELECT id FROM {category} WHERE id = ? AND user_id = ? LIMIT 1",
@@ -2606,19 +2715,27 @@ def update_book(category, book_id):
         flash("That book no longer exists.")
         return redirect(f"/{category}")
 
-    db.execute(
-        f"UPDATE {category} SET book = ?, status = ?, genres = ?, series = ?, notes = ? "
-        "WHERE id = ? AND user_id = ?",
-        book_name, status, genres, series, notes,
-        book_id, session["user_id"],
-    )
+    if category == "completed" and reread is not None:
+        db.execute(
+            f"UPDATE {category} SET book = ?, status = ?, genres = ?, series = ?, notes = ?, reread = ? "
+            "WHERE id = ? AND user_id = ?",
+            book_name, status, genres, series, notes, reread,
+            book_id, session["user_id"],
+        )
+    else:
+        db.execute(
+            f"UPDATE {category} SET book = ?, status = ?, genres = ?, series = ?, notes = ? "
+            "WHERE id = ? AND user_id = ?",
+            book_name, status, genres, series, notes,
+            book_id, session["user_id"],
+        )
     db.execute(
         "UPDATE combined SET book = ? WHERE id = ? AND user_id = ? AND page = ?",
         book_name, book_id, session["user_id"], category,
     )
 
     flash("Book updated.")
-    return redirect(f"/{category}#book-{book_id}")
+    return redirect(f"/{category}")
 
 
 def _parse_genre_list(text):
