@@ -154,12 +154,28 @@ def get_status_options(category, user_id):
     return [r["status"] for r in rows]
 
 
-def query_books_with_filters(category, user_id, status_filter=None, existence_filter=None):
+def get_reread_options(user_id):
+    rows = db.execute(
+        "SELECT DISTINCT reread FROM completed WHERE user_id = ? ORDER BY reread",
+        user_id,
+    )
+    return [r["reread"] for r in rows]
+
+
+def query_books_with_filters(category, user_id, status_filter=None, existence_filter=None, reread_filter=None):
     query = f"SELECT * FROM {category} WHERE user_id = ?"
     params = [user_id]
     if status_filter:
         query += " AND status = ?"
         params.append(status_filter)
+    if category == "completed" and reread_filter not in (None, ""):
+        try:
+            reread_value = int(reread_filter)
+        except (TypeError, ValueError):
+            reread_value = None
+        if reread_value is not None:
+            query += " AND reread = ?"
+            params.append(reread_value)
     if existence_filter in ("genres", "series", "notes"):
         query += f" AND {existence_filter} IS NOT NULL AND {existence_filter} != ''"
         query += f" ORDER BY {existence_filter}"
@@ -1882,6 +1898,7 @@ def undo_import_actions(user_id, actions):
 
 def import_completed_books(lines, user_id):
     aggregated = {}
+    seen_entries = set()
     pending_notes = []
     skipped = 0
     skipped_entries = []
@@ -1925,7 +1942,14 @@ def import_completed_books(lines, user_id):
             entry["notes"].extend(pending_notes)
             pending_notes = []
 
-        key = normalize_book_key(entry["book"])
+        exact_key = (normalize_book_key(entry["book"]), entry["date"].isoformat() if entry["date"] else None)
+        if exact_key in seen_entries:
+            skipped += 1
+            skipped_entries.append(raw_line)
+            continue
+        seen_entries.add(exact_key)
+
+        key = exact_key[0]
         if key in aggregated:
             existing = aggregated[key]
             if entry["date"] and (existing["date"] is None or entry["date"] < existing["date"]):
@@ -2390,14 +2414,16 @@ def choose():
     # Prefer filters sent with this request, otherwise fall back to stored filters
     status_filter = (request.form.get("status_filter") or "").strip() if request.method == "POST" else ""
     existence_filter = (request.form.get("filter") or "").strip() if request.method == "POST" else ""
+    reread_filter = (request.form.get("reread_filter") or "").strip() if request.method == "POST" else ""
 
-    if not (status_filter or existence_filter):
+    if not (status_filter or existence_filter or reread_filter):
         stored = session.get("filters", {}).get(page, {})
         status_filter = stored.get("status_filter", "")
         existence_filter = stored.get("existence_filter", "")
+        reread_filter = stored.get("reread_filter", "")
 
-    if status_filter or existence_filter:
-        candidates = query_books_with_filters(page, session["user_id"], status_filter, existence_filter)
+    if status_filter or existence_filter or reread_filter:
+        candidates = query_books_with_filters(page, session["user_id"], status_filter, existence_filter, reread_filter)
     else:
         candidates = db.execute(f"SELECT * FROM {page} WHERE user_id = ?", session["user_id"])
 
@@ -2431,24 +2457,29 @@ def render_category_page(category, template_name):
             session.setdefault("filters", {}).pop(category, None)
             status_filter = ""
             existence_filter = ""
+            reread_filter = ""
         else:
             # Merge new filters with saved ones so selections stack
             new_status = request.form.get("status_filter")
             new_exist = request.form.get("filter")
+            new_reread = request.form.get("reread_filter")
 
             status_filter = (new_status.strip() if new_status is not None else saved_filters.get("status_filter", ""))
             existence_filter = (new_exist.strip() if new_exist is not None else saved_filters.get("existence_filter", ""))
+            reread_filter = (new_reread.strip() if new_reread is not None else saved_filters.get("reread_filter", ""))
 
             session.setdefault("filters", {})[category] = {
                 "status_filter": status_filter,
                 "existence_filter": existence_filter,
+                "reread_filter": reread_filter,
             }
     else:
         status_filter = saved_filters.get("status_filter", "")
         existence_filter = saved_filters.get("existence_filter", "")
+        reread_filter = saved_filters.get("reread_filter", "")
 
-    if status_filter or existence_filter:
-        books = query_books_with_filters(category, session["user_id"], status_filter, existence_filter)
+    if status_filter or existence_filter or reread_filter:
+        books = query_books_with_filters(category, session["user_id"], status_filter, existence_filter, reread_filter)
     else:
         books = db.execute(
             f"SELECT * FROM {category} WHERE user_id = ? ORDER BY date DESC, id DESC",
@@ -2461,7 +2492,9 @@ def render_category_page(category, template_name):
         random=session.get("selected", []),
         selected_status=status_filter,
         selected_existence=existence_filter,
+        selected_reread=reread_filter,
         status_options=get_status_options(category, session["user_id"]),
+        reread_options=get_reread_options(session["user_id"]) if category == "completed" else [],
     )
 
 

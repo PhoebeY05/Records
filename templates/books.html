@@ -84,6 +84,16 @@
                         {% endfor %}
                     </select>
                 </div>
+                {% if page == "/completed" %}
+                <div class="col-12 col-md">
+                    <select class="form-select grey" name="reread_filter" onchange="this.form.submit()">
+                        <option value="" {% if selected_reread == "" %}selected{% endif %}>Filter by rereads...</option>
+                        {% for n in reread_options %}
+                            <option value="{{n}}" {% if selected_reread == n|string %}selected{% endif %}>{{n}} reread{{ '' if n == 1 else 's' }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
                 <div class="col-12 col-md-auto">
                     <button type="submit" name="clear" value="1" class="btn hidden-info clear-filter-btn w-100">Clear filter</button>
                 </div>
@@ -185,6 +195,12 @@
                                             <span class="book-edit-label">Series</span>
                                             <input type="text" name="series" value="{{ book.series or '' }}" placeholder="Series name">
                                         </label>
+                                        {% if book.reread is defined %}
+                                        <label class="book-edit-field">
+                                            <span class="book-edit-label">Rereads</span>
+                                            <input type="number" name="reread" value="{{ book.reread }}" min="0" step="1" inputmode="numeric" required>
+                                        </label>
+                                        {% endif %}
                                         <label class="book-edit-field">
                                             <span class="book-edit-label">Notes</span>
                                             <textarea name="notes" rows="3">{{ book.notes or '' }}</textarea>

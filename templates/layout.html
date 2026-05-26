@@ -148,6 +148,10 @@
                               </div>
                           </label>
                           <label class="book-detail-edit-field"><span>Series</span><input type="text" name="series"></label>
+                          <label class="book-detail-edit-field book-detail-reread-edit-field js-reread-edit" hidden>
+                              <span>Rereads</span>
+                              <input type="number" name="reread" min="0" step="1" inputmode="numeric" required>
+                          </label>
                       </div>
 
                       <div class="book-detail-notes-section js-view">
@@ -216,6 +220,17 @@
                   form.querySelector('[name="genres"]').value = data.genres || "";
                   form.querySelector('[name="series"]').value = data.series || "";
                   form.querySelector('[name="notes"]').value = data.notes || "";
+                  const rereadEditField = modalEl.querySelector(".js-reread-edit");
+                  const rereadInput = form.querySelector('[name="reread"]');
+                  if (rereadEditField && rereadInput) {
+                      if (data.reread !== undefined) {
+                          rereadEditField.hidden = false;
+                          rereadInput.value = data.reread;
+                      } else {
+                          rereadEditField.hidden = true;
+                          rereadInput.value = "";
+                      }
+                  }
 
                   setEditMode(false);
               }

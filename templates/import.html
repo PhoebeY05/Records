@@ -68,7 +68,7 @@
             </ul>
         </li>
         <li>Unfinished: title is everything before the first progress marker, and notes start at that marker. Supported markers include 章, 页, Pg, page, chapter, Chapter, volume, Volume, plus forms like 14章, 第661章, 12页, and 491章/ 77章. The helper text "(haven't read)" is stripped out on import if you include it beside the title.</li>
-        <li>Duplicate handling: Completed adds 1 reread per duplicate and ignores any extra read-count text on the duplicate line, To Be Read keeps earliest in file, Unfinished keeps latest in file.</li>
+        <li>Duplicate handling: Completed ignores exact duplicate entries with the same title and date, adds 1 reread for the same book on a different date, and ignores any extra read-count text on duplicate lines; To Be Read keeps earliest in file, Unfinished keeps latest in file.</li>
     </ul>
 </div>
 {% endblock %}
