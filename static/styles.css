@@ -1841,3 +1841,801 @@ a:hover
     font-size: 0.9rem;
     color: #6c757d;
 }
+
+/* ---------- Trends line charts ---------- */
+.trends-chart-card {
+    background: #fff;
+    border: 1px solid #e0d7cf;
+    border-radius: 10px;
+    padding: 0.9rem 1rem;
+    margin-bottom: 0.9rem;
+}
+.trends-chart-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.6rem;
+}
+.trends-chart-title {
+    font-family: 'Georgia';
+    font-size: 1rem;
+    font-weight: 700;
+    color: #3a2a25;
+    margin: 0;
+}
+.trends-chart-sub {
+    font-size: 0.83rem;
+    color: #8a7c75;
+    font-style: italic;
+}
+.trends-chart-svg {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+.trends-chart-axis {
+    stroke: #d9cdc2;
+    stroke-width: 1;
+}
+.trends-chart-grid {
+    stroke: #f0e6dd;
+    stroke-width: 1;
+    stroke-dasharray: 3 3;
+}
+.trends-chart-axis-label {
+    font-size: 11px;
+    fill: #8a7c75;
+    font-family: 'Georgia';
+}
+.trends-chart-line {
+    stroke-width: 2;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+    fill: none;
+}
+.trends-chart-line-volume {
+    stroke: #6B0F1A;
+}
+.trends-chart-dot {
+    transition: r 0.15s ease;
+    cursor: default;
+}
+.trends-chart-dot:hover {
+    r: 5;
+}
+.trends-chart-legend {
+    list-style: none;
+    padding: 0;
+    margin: 0.75rem 0 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.1rem;
+}
+.trends-chart-legend li {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.88rem;
+    color: #3a2a25;
+}
+.trends-chart-legend-swatch {
+    width: 14px;
+    height: 3px;
+    border-radius: 2px;
+    display: inline-block;
+}
+.trends-chart-legend-label {
+    font-weight: 600;
+}
+.trends-chart-legend-total {
+    color: #8a7c75;
+    font-size: 0.8rem;
+}
+
+.trends-period-break {
+    list-style: none;
+    text-align: center;
+    margin: 0.1rem 0;
+    padding: 0;
+    position: relative;
+}
+.trends-period-break::before,
+.trends-period-break::after {
+    content: "";
+    display: inline-block;
+    width: 30%;
+    height: 1px;
+    background: #d9cdc2;
+    vertical-align: middle;
+    margin: 0 0.6rem;
+}
+.trends-period-break-label {
+    color: #8a7c75;
+    font-size: 0.82rem;
+    font-style: italic;
+    background: transparent;
+    letter-spacing: 0.03em;
+}
+
+.trends-rereads-card {
+    border-left: 4px solid #b08968;
+    background: #fbf8f4;
+}
+.trends-reread-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+.trends-reread-item {
+    border: 1px solid #e0d7cf;
+    border-radius: 10px;
+    background: #fff;
+    padding: 0.6rem 0.85rem;
+}
+.trends-reread-main {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+.trends-reread-title {
+    color: #3a2a25;
+    font-family: 'Georgia';
+    font-weight: 700;
+    text-decoration: none;
+}
+.trends-reread-title:hover {
+    color: #6B0F1A;
+    text-decoration: underline;
+}
+.trends-reread-date {
+    color: #8a7c75;
+    font-size: 0.82rem;
+    white-space: nowrap;
+}
+.trends-reread-badges {
+    margin-top: 0.3rem;
+}
+
+.trends-missing-section {
+    margin-top: 2.25rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid #e8ddd4;
+}
+.trends-missing-group {
+    background: #fff;
+    border: 1px solid #e0d7cf;
+    border-radius: 10px;
+    padding: 0.65rem 0.9rem;
+    margin-bottom: 0.6rem;
+}
+.trends-missing-group[open] {
+    background: #fffaf6;
+}
+.trends-missing-group summary {
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-family: 'Georgia';
+    color: #3a2a25;
+}
+.trends-missing-group summary::-webkit-details-marker {
+    display: none;
+}
+.trends-missing-group summary::before {
+    content: "▸";
+    font-size: 0.85rem;
+    color: #6B0F1A;
+    transition: transform 0.15s ease;
+}
+.trends-missing-group[open] summary::before {
+    transform: rotate(90deg);
+}
+.trends-missing-summary-label {
+    font-weight: 700;
+}
+.trends-missing-summary-count {
+    background: #6B0F1A;
+    color: #fff;
+    border-radius: 999px;
+    padding: 0.05rem 0.55rem;
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+.trends-missing-list {
+    list-style: none;
+    padding: 0.75rem 0 0;
+    margin: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 0.3rem 1rem;
+}
+.trends-missing-item {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.25rem 0;
+    border-bottom: 1px dashed #ecdfd4;
+    font-size: 0.92rem;
+}
+.trends-missing-item a {
+    color: #3a2a25;
+    text-decoration: none;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.trends-missing-item a:hover {
+    color: #6B0F1A;
+    text-decoration: underline;
+}
+.trends-missing-meta {
+    color: #8a7c75;
+    font-size: 0.8rem;
+    white-space: nowrap;
+}
+
+/* ---------- Analytics page ---------- */
+.analytics-page {
+    font-family: 'Georgia';
+    color: #3a2a25;
+}
+.analytics-subtitle {
+    color: #6c757d;
+    font-style: italic;
+    font-size: 0.95rem;
+}
+.analytics-section {
+    margin-top: 2.25rem;
+    margin-bottom: 1rem;
+}
+.analytics-section-title {
+    font-family: 'Georgia';
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #3a2a25;
+    margin-bottom: 0.75rem;
+    border-bottom: 1px solid #e8ddd4;
+    padding-bottom: 0.35rem;
+}
+.analytics-note {
+    color: #6c757d;
+    font-size: 0.9rem;
+    margin: 0;
+}
+.analytics-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 0.85rem;
+    margin-bottom: 1.5rem;
+}
+.analytics-stat-card {
+    background: #fff;
+    border: 1px solid #e0d7cf;
+    border-radius: 10px;
+    padding: 0.95rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+.analytics-stat-card-accent {
+    border-color: #6B0F1A;
+    background: #fff8f5;
+}
+.analytics-stat-value {
+    font-family: 'Georgia';
+    font-size: 1.85rem;
+    font-weight: 700;
+    color: #6B0F1A;
+    line-height: 1.1;
+}
+.analytics-stat-label {
+    font-size: 0.88rem;
+    color: #5a4a45;
+    font-weight: 600;
+    display: flex;
+    flex-direction: column;
+    gap: 0.05rem;
+}
+.analytics-stat-sublabel {
+    font-weight: 400;
+    color: #8a7c75;
+    font-size: 0.78rem;
+}
+
+.analytics-report-card {
+    margin-top: 1.5rem;
+    padding: 1.15rem 1.25rem;
+    border-radius: 14px;
+    border: 1px solid #e0d7cf;
+    background: linear-gradient(135deg, #fffaf6, #fff);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    box-shadow: 0 8px 20px rgba(49, 8, 31, 0.04);
+}
+.analytics-report-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    align-items: flex-end;
+    text-align: right;
+}
+.analytics-report-button {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.analytics-report-hint {
+    font-size: 0.82rem;
+    color: #8a7c75;
+    max-width: 24rem;
+}
+
+/* Reading span banner */
+.analytics-span-card {
+    background: #fff;
+    border: 1px solid #e0d7cf;
+    border-radius: 10px;
+    padding: 1.1rem 1.25rem;
+}
+.analytics-span-row {
+    display: flex;
+    align-items: stretch;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+.analytics-span-endpoint {
+    flex: 0 0 auto;
+    min-width: 130px;
+}
+.analytics-span-endpoint-end {
+    text-align: right;
+}
+.analytics-span-endpoint-label {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #8a7c75;
+}
+.analytics-span-endpoint-date {
+    font-family: 'Georgia';
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #3a2a25;
+    margin-top: 0.15rem;
+}
+.analytics-span-track {
+    flex: 1 1 200px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    position: relative;
+}
+.analytics-span-track-line {
+    height: 4px;
+    background: linear-gradient(to right, #e0d7cf, #6B0F1A, #e0d7cf);
+    border-radius: 2px;
+    width: 100%;
+}
+.analytics-span-duration {
+    font-family: 'Georgia';
+    font-size: 1rem;
+    color: #3a2a25;
+    text-align: center;
+}
+.analytics-span-duration strong {
+    font-size: 1.25rem;
+    color: #6B0F1A;
+}
+.analytics-span-duration-sub {
+    display: block;
+    font-size: 0.8rem;
+    color: #8a7c75;
+    margin-top: 0.15rem;
+}
+
+/* Stacked status bar */
+.analytics-stack-bar {
+    display: flex;
+    height: 36px;
+    border-radius: 6px;
+    overflow: hidden;
+    border: 1px solid #e0d7cf;
+    background: #f3ebe4;
+}
+.analytics-stack-segment {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 0.85rem;
+    font-weight: 600;
+    transition: width 0.4s ease;
+    white-space: nowrap;
+}
+.analytics-stack-completed {
+    background: #6B0F1A;
+}
+.analytics-stack-tbr {
+    background: #b08968;
+}
+.analytics-stack-unfinished {
+    background: #8a7c75;
+}
+.analytics-legend {
+    list-style: none;
+    padding: 0;
+    margin: 0.75rem 0 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.85rem 1.5rem;
+}
+.analytics-legend li {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.9rem;
+}
+.analytics-legend-swatch {
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    display: inline-block;
+}
+.analytics-legend-label {
+    color: #3a2a25;
+    font-weight: 600;
+}
+.analytics-legend-count {
+    color: #3a2a25;
+}
+.analytics-legend-percent {
+    color: #8a7c75;
+    font-size: 0.85rem;
+}
+
+.analytics-legend-compact {
+    margin-top: 0;
+}
+
+.analytics-mix-card {
+    background: #fff;
+    border: 1px solid #e0d7cf;
+    border-radius: 12px;
+    padding: 1.1rem;
+    display: grid;
+    grid-template-columns: minmax(240px, 320px) 1fr;
+    gap: 1.25rem;
+    align-items: start;
+}
+
+.analytics-pie-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.analytics-pie-chart {
+    position: relative;
+    width: min(100%, 280px);
+    aspect-ratio: 1 / 1;
+    border-radius: 50%;
+    box-shadow: inset 0 0 0 1px #e0d7cf;
+    overflow: hidden;
+    background: conic-gradient(#6B0F1A 0 0, #b08968 0 0, #8a7c75 0 0);
+}
+
+.analytics-pie-chart::after {
+    content: "";
+    position: absolute;
+    inset: 18%;
+    border-radius: 50%;
+    background: linear-gradient(180deg, #fffcf8 0%, #fbf4e2 100%);
+    box-shadow: inset 0 0 0 1px rgba(224, 215, 207, 0.8);
+}
+
+.analytics-pie-center {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 1rem;
+}
+
+.analytics-pie-center-value {
+    display: block;
+    font-family: 'Georgia';
+    font-size: 2.15rem;
+    line-height: 1;
+    color: #6B0F1A;
+}
+
+.analytics-pie-center-label {
+    margin-top: 0.3rem;
+    font-size: 0.78rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #8a7c75;
+}
+
+.analytics-mix-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.analytics-mix-mini-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.85rem;
+}
+
+.analytics-mini-card {
+    background: #fff8f5;
+    border: 1px solid #e7d7d0;
+    border-radius: 10px;
+    padding: 0.9rem 0.95rem;
+}
+
+.analytics-mini-value {
+    font-family: 'Georgia';
+    font-size: 1.55rem;
+    font-weight: 700;
+    color: #6B0F1A;
+    line-height: 1.1;
+}
+
+.analytics-mini-label {
+    margin-top: 0.2rem;
+    color: #5a4a45;
+    font-size: 0.88rem;
+    font-weight: 600;
+}
+
+.analytics-mini-subtitle {
+    margin-top: 0.15rem;
+    color: #8a7c75;
+    font-size: 0.78rem;
+}
+
+/* Reading pace cards */
+.analytics-pace-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 0.85rem;
+}
+.analytics-pace-card {
+    background: #fff;
+    border: 1px solid #e0d7cf;
+    border-radius: 10px;
+    padding: 0.95rem 1rem;
+}
+.analytics-pace-value {
+    font-family: 'Georgia';
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #6B0F1A;
+    line-height: 1.1;
+}
+.analytics-pace-label {
+    font-size: 0.88rem;
+    color: #5a4a45;
+    font-weight: 600;
+    margin-top: 0.2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+.analytics-pace-sublabel {
+    font-weight: 400;
+    color: #8a7c75;
+    font-size: 0.78rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Horizontal bar lists (years, genres, series) */
+.analytics-bar-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+}
+.analytics-bar-row {
+    display: grid;
+    grid-template-columns: 70px 1fr auto auto;
+    align-items: center;
+    column-gap: 0.7rem;
+    font-size: 0.92rem;
+}
+.analytics-bar-label {
+    color: #3a2a25;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.analytics-bar-label-wide {
+    /* When labels can be long (genres / series), give them more room */
+}
+.analytics-bar-row:has(.analytics-bar-label-wide) {
+    grid-template-columns: minmax(120px, 1.2fr) 2fr auto auto;
+}
+.analytics-bar-track {
+    height: 12px;
+    background: #f0e6dd;
+    border-radius: 6px;
+    overflow: hidden;
+}
+.analytics-bar-fill {
+    height: 100%;
+    background: #6B0F1A;
+    border-radius: 6px;
+    transition: width 0.4s ease;
+    min-width: 2px;
+}
+.analytics-bar-fill-accent {
+    background: linear-gradient(to right, #8a1828, #6B0F1A);
+}
+.analytics-bar-fill-secondary {
+    background: #b08968;
+}
+.analytics-bar-count {
+    color: #3a2a25;
+    font-weight: 600;
+    min-width: 1.5rem;
+    text-align: right;
+}
+.analytics-bar-percent {
+    color: #8a7c75;
+    font-size: 0.82rem;
+    min-width: 3rem;
+    text-align: right;
+}
+
+/* Vertical month chart */
+.analytics-month-chart {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 0.4rem;
+    align-items: end;
+    height: 200px;
+    padding: 0.5rem 0.25rem 0;
+    border-bottom: 1px solid #e0d7cf;
+}
+.analytics-month-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    height: 100%;
+    gap: 0.35rem;
+}
+.analytics-month-bar-wrap {
+    flex: 1;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: center;
+    position: relative;
+}
+.analytics-month-count {
+    font-size: 0.75rem;
+    color: #6c757d;
+    margin-bottom: 2px;
+    min-height: 1em;
+}
+.analytics-month-bar {
+    width: 70%;
+    min-height: 2px;
+    background: linear-gradient(to top, #6B0F1A, #8a1828);
+    border-radius: 4px 4px 0 0;
+    transition: height 0.4s ease;
+}
+.analytics-month-label {
+    font-size: 0.72rem;
+    color: #5a4a45;
+    text-align: center;
+}
+
+/* Two-column layout for series + rereads */
+.analytics-two-col {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+}
+.analytics-two-col-pane {
+    background: #fff;
+    border: 1px solid #e0d7cf;
+    border-radius: 10px;
+    padding: 1rem 1.1rem;
+}
+.analytics-two-col-pane .analytics-section-title {
+    margin-top: 0;
+}
+
+/* Simple lists (rereads) */
+.analytics-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+.analytics-list-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 0.5rem;
+    padding: 0.35rem 0;
+    border-bottom: 1px dashed #ecdfd4;
+    font-size: 0.93rem;
+}
+.analytics-list-row:last-child {
+    border-bottom: none;
+}
+.analytics-list-title {
+    color: #3a2a25;
+    font-weight: 600;
+}
+.analytics-list-meta {
+    color: #8a7c75;
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+    .analytics-span-endpoint-end {
+        text-align: left;
+    }
+    .analytics-month-label {
+        font-size: 0.62rem;
+    }
+    .analytics-month-count {
+        font-size: 0.65rem;
+    }
+    .analytics-bar-row {
+        grid-template-columns: 60px 1fr auto;
+    }
+    .analytics-bar-percent {
+        display: none;
+    }
+
+    .analytics-mix-card {
+        grid-template-columns: 1fr;
+    }
+
+    .analytics-mix-mini-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .analytics-report-actions {
+        width: 100%;
+        align-items: flex-start;
+        text-align: left;
+    }
+}

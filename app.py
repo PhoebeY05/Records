@@ -1,4 +1,4 @@
-from flask import Flask, redirect, session, render_template, request, flash, url_for
+from flask import Flask, Response, redirect, session, render_template, request, flash, url_for
 from flask_session import Session
 from cs50 import SQL
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -21,6 +21,8 @@ import json
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import quote_plus, parse_qs, unquote, urlparse
+from pathlib import Path
+import sys
 
 try:
     from sentence_transformers import SentenceTransformer, util
@@ -2613,22 +2615,67 @@ def _cosine_distance(a, b):
     return 1.0 - dot / (na * nb)
 
 
-def _find_change_points(rows, min_period=3, max_periods=5, min_gain=0.25):
-    """Binary segmentation on the genre signal.
+def _find_time_breaks(rows, min_gap_days=45, median_factor=5.0):
+    """Find indices where consecutive completions are separated by a real break.
 
-    Returns sorted list of split indices including 0 and len(rows), so
+    A "break" is a gap that is both absolutely large (≥ `min_gap_days`) and
+    relatively large (≥ `median_factor` × median gap between reads for this
+    user). Tuning the two together avoids treating a heavy reader's normal pace
+    as a break, while still catching the case where someone reads a book per
+    week for years and then disappears for six months.
+
+    Returns a sorted list of indices `i` such that there is a break between
+    rows[i-1] and rows[i].
+    """
+    if len(rows) < 2:
+        return []
+    gaps = [
+        (rows[i]["date"] - rows[i - 1]["date"]).days
+        for i in range(1, len(rows))
+    ]
+    nonzero = [g for g in gaps if g > 0]
+    if not nonzero:
+        return []
+    sorted_gaps = sorted(nonzero)
+    median = sorted_gaps[len(sorted_gaps) // 2]
+    threshold = max(min_gap_days, median * median_factor)
+    return [i for i, g in enumerate(gaps, start=1) if g >= threshold]
+
+
+def _find_change_points(rows, min_period=5, max_periods=12, min_gain=0.15):
+    """Segment a reading history into periods using two signals.
+
+    1. Time breaks — gaps in reading where the user stopped for an unusually
+       long time. These are the strongest, most natural boundaries.
+    2. Content shifts — binary segmentation on the genre-frequency signal,
+       to split a single long stretch of reading into sub-periods if the
+       genre mix changes meaningfully.
+
+    `min_period` only constrains *content-based* splits — it stops the genre
+    detector from producing tiny (2–3 book) periods that are mostly noise.
+    Time-break splits are unconditional, since a real multi-month gap is
+    meaningful even if only a few books surround it.
+
+    Returns a sorted list of split indices including 0 and len(rows), so
     consecutive pairs define each period.
     """
     n = len(rows)
-    if n < 2 * min_period:
-        return [0, n]
+    if n == 0:
+        return [0, 0]
 
-    splits = [0, n]
+    # Step 1: every break in the history becomes a hard boundary.
+    splits = {0, n}
+    for b in _find_time_breaks(rows):
+        splits.add(b)
+
+    # Step 2: greedily subdivide remaining long segments by genre shift, but
+    # only as long as the cosine gap clears the (now looser) threshold.
     while len(splits) - 1 < max_periods:
+        splits_sorted = sorted(splits)
         best_split = None
         best_gain = 0.0
-        for i in range(len(splits) - 1):
-            start, end = splits[i], splits[i + 1]
+        for i in range(len(splits_sorted) - 1):
+            start, end = splits_sorted[i], splits_sorted[i + 1]
             if end - start < 2 * min_period:
                 continue
             for candidate in range(start + min_period, end - min_period + 1):
@@ -2640,9 +2687,9 @@ def _find_change_points(rows, min_period=3, max_periods=5, min_gain=0.25):
                     best_split = candidate
         if best_split is None or best_gain < min_gain:
             break
-        splits.append(best_split)
-        splits.sort()
-    return splits
+        splits.add(best_split)
+
+    return sorted(splits)
 
 
 def compute_genre_trends(user_id, top_n=3):
@@ -2706,6 +2753,14 @@ def compute_genre_trends(user_id, top_n=3):
             continue
         freq = _genre_freq(period_rows)
         top = sorted(freq.items(), key=lambda kv: (-kv[1], kv[0]))[:top_n]
+
+        # Was this period preceded by a real reading break?
+        gap_before_days = None
+        if start > 0:
+            gap = (period_rows[0]["date"] - parsed[start - 1]["date"]).days
+            if gap >= 45:
+                gap_before_days = gap
+
         periods.append(
             {
                 "start_date": period_rows[0]["date"],
@@ -2714,18 +2769,325 @@ def compute_genre_trends(user_id, top_n=3):
                 "top_genres": [{"genre": g, "count": c} for g, c in top],
                 "all_genres_count": len(freq),
                 "sample_books": [r["book"] for r in period_rows[:5]],
+                "gap_before_days": gap_before_days,
             }
         )
 
-    current = periods[-1]["top_genres"] if periods else []
+    current_interest, window_info = _recent_interest_window(parsed, top_n=8)
+    reread_suggestions = _suggest_rereads(
+        parsed, current_interest, window_info, top_n=6
+    )
+
+    time_series = _bucket_genre_time_series(parsed, top_n=6)
+    charts = _build_trend_charts(time_series) if time_series else None
 
     return {
         "total_books": len(parsed),
         "periods": periods,
-        "current_interest": current,
+        "current_interest": current_interest,
+        "current_window": window_info,
+        "reread_suggestions": reread_suggestions,
         "missing_completed": missing_completed_sorted,
         "missing_other": missing_other_sorted,
+        "charts": charts,
     }
+
+
+def _bucket_genre_time_series(parsed, top_n=6):
+    """Bucket completed-book history into monthly or quarterly buckets and
+    return per-bucket volumes plus per-genre counts for the top N genres.
+
+    Adaptive granularity:
+      - span ≤ 36 months  → monthly
+      - else              → quarterly
+
+    Returns None if there's nothing meaningful to chart.
+    """
+    if len(parsed) < 4:
+        return None
+    first = parsed[0]["date"]
+    last = parsed[-1]["date"]
+    months_span = (last.year - first.year) * 12 + (last.month - first.month) + 1
+    unit = "month" if months_span <= 36 else "quarter"
+
+    def bump_month(d):
+        nm = d.month + 1
+        ny = d.year + (nm - 1) // 12
+        nm = ((nm - 1) % 12) + 1
+        return date(ny, nm, 1)
+
+    def bump_quarter(d):
+        nm = d.month + 3
+        ny = d.year + (nm - 1) // 12
+        nm = ((nm - 1) % 12) + 1
+        return date(ny, nm, 1)
+
+    if unit == "month":
+        start_bucket = date(first.year, first.month, 1)
+        end_bucket = date(last.year, last.month, 1)
+        step = bump_month
+        def label_for(b):
+            return {"full": b.strftime("%b %Y"), "short": b.strftime("%b '%y")}
+        def index_of(d):
+            return (d.year - start_bucket.year) * 12 + (d.month - start_bucket.month)
+    else:
+        sq = ((first.month - 1) // 3) * 3 + 1
+        eq = ((last.month - 1) // 3) * 3 + 1
+        start_bucket = date(first.year, sq, 1)
+        end_bucket = date(last.year, eq, 1)
+        step = bump_quarter
+        def label_for(b):
+            q = (b.month - 1) // 3 + 1
+            return {"full": f"Q{q} {b.year}", "short": f"Q{q} '{str(b.year)[2:]}"}
+        def index_of(d):
+            sq_first = (start_bucket.month - 1) // 3
+            dq = (d.month - 1) // 3
+            return (d.year - start_bucket.year) * 4 + (dq - sq_first)
+
+    buckets_dates = []
+    cur = start_bucket
+    while cur <= end_bucket:
+        buckets_dates.append(cur)
+        cur = step(cur)
+    n_buckets = len(buckets_dates)
+    if n_buckets < 2:
+        return None
+
+    volume = [0] * n_buckets
+    overall_freq = {}
+    per_bucket_genres = [dict() for _ in range(n_buckets)]
+    for r in parsed:
+        bi = index_of(r["date"])
+        if bi < 0 or bi >= n_buckets:
+            continue
+        volume[bi] += 1
+        for g in r["genres_list"]:
+            overall_freq[g] = overall_freq.get(g, 0) + 1
+            per_bucket_genres[bi][g] = per_bucket_genres[bi].get(g, 0) + 1
+
+    top_genre_names = [
+        g for g, _ in sorted(
+            overall_freq.items(), key=lambda kv: (-kv[1], kv[0])
+        )[:top_n]
+    ]
+    genre_series = [
+        {
+            "genre": g,
+            "total": overall_freq[g],
+            "points": [per_bucket_genres[i].get(g, 0) for i in range(n_buckets)],
+        }
+        for g in top_genre_names
+    ]
+
+    return {
+        "unit": unit,
+        "buckets": [label_for(b) for b in buckets_dates],
+        "volume": volume,
+        "max_volume": max(volume) if volume else 0,
+        "genre_series": genre_series,
+        "max_genre_value": max(
+            (max(s["points"]) for s in genre_series), default=0
+        ),
+    }
+
+
+GENRE_LINE_COLORS = [
+    "#6B0F1A",  # deep red — house color
+    "#b08968",  # tan
+    "#3a6a78",  # teal
+    "#8a4f7d",  # plum
+    "#d7822a",  # amber
+    "#4d6a3f",  # olive
+]
+
+
+def _y_ticks(max_val, plot_h, pad_top, count=4):
+    """Generate evenly-spaced Y-axis ticks at "nice" round values.
+
+    Picks the {1, 2, 2.5, 5} × 10^n step closest to the ideal (max/count),
+    so the chart shows a sensible number of labels rather than 2 sparse ones.
+    """
+    if max_val <= 0:
+        return [{"value": 0, "y": pad_top + plot_h}]
+    raw_step = max_val / count
+    magnitude = 10 ** max(0, int(math.log10(raw_step))) if raw_step >= 1 else 1
+    best_step = magnitude
+    best_diff = abs(magnitude - raw_step)
+    for m in (1, 2, 2.5, 5, 10):
+        cand = m * magnitude
+        diff = abs(cand - raw_step)
+        if diff < best_diff:
+            best_diff = diff
+            best_step = cand
+    step = best_step
+    ticks = []
+    v = 0.0
+    while v <= max_val + step / 2:
+        y = pad_top + plot_h - (v / max_val) * plot_h
+        if y < pad_top - 1:
+            break
+        value = int(v) if abs(v - round(v)) < 1e-9 else round(v, 1)
+        ticks.append({"value": value, "y": round(y, 1)})
+        v += step
+    return ticks
+
+
+def _build_trend_charts(ts):
+    """Pre-compute SVG geometry for the trends-page line charts so the Jinja
+    template stays declarative.
+    """
+    if not ts:
+        return None
+    n = len(ts["buckets"])
+    if n < 2:
+        return None
+
+    width = 820
+    height = 240
+    pad_top, pad_right, pad_bottom, pad_left = 14, 14, 38, 38
+    plot_w = width - pad_left - pad_right
+    plot_h = height - pad_top - pad_bottom
+
+    def x_for(i):
+        return pad_left + (i / (n - 1)) * plot_w
+
+    label_step = max(1, (n - 1) // 7)
+    x_ticks = []
+    for i, b in enumerate(ts["buckets"]):
+        if i % label_step == 0 or i == n - 1:
+            x_ticks.append({"x": round(x_for(i), 1), "label": b["short"]})
+
+    def build_line(values, max_val):
+        max_val = max_val or 1
+        pts = []
+        polyline = []
+        for i, v in enumerate(values):
+            x = x_for(i)
+            y = pad_top + plot_h - (v / max_val) * plot_h
+            polyline.append(f"{x:.1f},{y:.1f}")
+            pts.append({"x": round(x, 1), "y": round(y, 1), "value": v})
+        return {"polyline": " ".join(polyline), "points": pts}
+
+    volume_line = build_line(ts["volume"], ts["max_volume"])
+    vol_y_ticks = _y_ticks(ts["max_volume"], plot_h, pad_top)
+
+    max_g = ts["max_genre_value"]
+    genre_lines = []
+    for idx, s in enumerate(ts["genre_series"]):
+        line = build_line(s["points"], max_g)
+        genre_lines.append(
+            {
+                "genre": s["genre"],
+                "total": s["total"],
+                "color": GENRE_LINE_COLORS[idx % len(GENRE_LINE_COLORS)],
+                "polyline": line["polyline"],
+                "points": line["points"],
+            }
+        )
+    genre_y_ticks = _y_ticks(max_g, plot_h, pad_top)
+
+    return {
+        "unit_label": "month" if ts["unit"] == "month" else "quarter",
+        "width": width,
+        "height": height,
+        "plot": {
+            "top": pad_top,
+            "left": pad_left,
+            "right": width - pad_right,
+            "bottom": pad_top + plot_h,
+            "width": plot_w,
+            "height": plot_h,
+        },
+        "x_ticks": x_ticks,
+        "volume": {
+            "polyline": volume_line["polyline"],
+            "points": volume_line["points"],
+            "max": ts["max_volume"],
+            "y_ticks": vol_y_ticks,
+        },
+        "genres": {
+            "lines": genre_lines,
+            "max": max_g,
+            "y_ticks": genre_y_ticks,
+        },
+        "buckets": ts["buckets"],
+    }
+
+
+def _recent_interest_window(parsed, top_n=8):
+    """Pick a recent window of completed books and return genres that recur within it.
+
+    Strategy: take the last ~30 reads (or 20% of the library, whichever is bigger,
+    capped at 60). A genre only counts as a "current interest" if it appears in
+    at least 3 books or 15% of the window — whichever is larger. This filters
+    out one-off reads while staying responsive to recent shifts.
+
+    Returns (genres_list, window_info | None). window_info has start/end dates
+    and book_count.
+    """
+    if not parsed:
+        return [], None
+    n = len(parsed)
+    # Adaptive window: at least 10, target ~20% of library, hard cap 60.
+    window_size = min(max(10, n // 5), 60, n)
+    if window_size < 5:
+        # Too little data — fall back to whatever exists.
+        window_size = n
+    window = parsed[-window_size:]
+    freq = _genre_freq(window)
+    if not freq:
+        return [], None
+    threshold = max(3, int(round(len(window) * 0.15)))
+    strong = [(g, c) for g, c in freq.items() if c >= threshold]
+    # If the threshold filtered everything out (very diverse reader), fall back
+    # to the raw top-N so something is still shown.
+    if not strong:
+        strong = sorted(freq.items(), key=lambda kv: (-kv[1], kv[0]))[:top_n]
+    else:
+        strong.sort(key=lambda kv: (-kv[1], kv[0]))
+        strong = strong[:top_n]
+    genres = [{"genre": g, "count": c} for g, c in strong]
+    window_info = {
+        "start_date": window[0]["date"],
+        "end_date": window[-1]["date"],
+        "book_count": len(window),
+    }
+    return genres, window_info
+
+
+def _suggest_rereads(parsed, current_interest, window_info, top_n=6):
+    """Suggest older completed books worth revisiting based on current taste.
+
+    Scoring: how many genres a book shares with the current-interest set.
+    Tie-break by oldest read date (longest since you last touched it).
+    Excludes the recent window — those aren't "rereads", they're recent.
+    """
+    if not parsed or not current_interest or not window_info:
+        return []
+    interest_set = {item["genre"] for item in current_interest}
+    if not interest_set:
+        return []
+    historical = parsed[: -window_info["book_count"]]
+    if not historical:
+        return []
+    scored = []
+    for r in historical:
+        genres_set = set(r["genres_list"])
+        matched = genres_set & interest_set
+        if not matched:
+            continue
+        scored.append(
+            {
+                "score": len(matched),
+                "book": r["book"],
+                "id": r["id"],
+                "date": r["date"],
+                "matched_genres": sorted(matched),
+            }
+        )
+    # Highest overlap first; tie-break by oldest (most due for revisit).
+    scored.sort(key=lambda x: (-x["score"], x["date"]))
+    return scored[:top_n]
 
 
 @app.route("/trends", methods=["GET"])
@@ -2926,11 +3288,11 @@ def compute_analytics(user_id):
         "unfinished": "#8a7c75",
     }
     running_percent = 0.0
-    status_items = list((
+    status_items = [
         ("Completed", total_completed, "completed"),
         ("To Be Read", total_tbr, "tbr"),
         ("Unfinished", total_unfinished, "unfinished"),
-    ))
+    ]
     for idx, (label, n, cls) in enumerate(status_items):
         pct = round(n * 100 / total_books, 1) if total_books else 0
         start_pct = round(running_percent, 1)
@@ -3024,6 +3386,66 @@ def analytics_view():
         return redirect("/")
     data = compute_analytics(session["user_id"])
     return render_template("analytics.html", stats=data, title="Analytics")
+
+
+@app.route("/analytics/details", methods=["GET"])
+def analytics_details_view():
+    if not session_user_exists():
+        session.clear()
+        flash("Your session is no longer valid. Please log in again.")
+        return redirect("/")
+    data = compute_analytics(session["user_id"])
+    generated_on = date.today().strftime("%d %b %Y")
+    html = render_template(
+        "analytics_report_pdf.html",
+        stats=data,
+        generated_on=generated_on,
+        title="Detailed Analytics Report",
+    )
+
+    try:
+        pdf_bytes = render_analytics_pdf(html)
+    except Exception:
+        app.logger.exception("Unable to generate analytics PDF")
+        return html
+
+    response = Response(pdf_bytes, mimetype="application/pdf")
+    response.headers["Content-Disposition"] = (
+        'inline; filename="reading-records-analytics-report.pdf"'
+    )
+    return response
+
+
+def _playwright_python_executable():
+    env_python = os.environ.get("PLAYWRIGHT_PYTHON")
+    if env_python:
+        return env_python
+    candidate = Path.home() / "miniforge3" / "bin" / "python"
+    if candidate.exists():
+        return str(candidate)
+    return sys.executable
+
+
+def render_analytics_pdf(html):
+    helper_script = Path(BASE_DIR) / "render_analytics_report_pdf.py"
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmpdir_path = Path(tmpdir)
+        html_path = tmpdir_path / "analytics-report.html"
+        pdf_path = tmpdir_path / "analytics-report.pdf"
+        html_path.write_text(html, encoding="utf-8")
+
+        result = subprocess.run(
+            [_playwright_python_executable(), str(helper_script), str(html_path), str(pdf_path)],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            stderr = (result.stderr or "").strip()
+            stdout = (result.stdout or "").strip()
+            details = stderr or stdout or "Unknown PDF export error"
+            raise RuntimeError(details)
+
+        return pdf_path.read_bytes()
 
 
 @app.route("/api/update_genres/<category>/<int:book_id>", methods=["POST"])

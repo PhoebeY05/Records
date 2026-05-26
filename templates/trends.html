@@ -14,7 +14,9 @@
             Once you have completed books tagged with genres, this page will
             show the periods of time where certain genres dominated your reading.
         </div>
-    {% else %}
+    {% endif %}
+
+    {% if trends.total_books > 0 %}
         {% if trends.current_interest %}
             <div class="card mb-4 trends-current-card">
                 <div class="card-body">
@@ -27,11 +29,147 @@
                             </span>
                         {% endfor %}
                     </div>
-                    <p class="trends-current-hint mt-2 mb-0">
-                        Based on the most recent stable period in your completed reading.
-                    </p>
+                    {% if trends.current_window %}
+                        <p class="trends-current-hint mt-2 mb-0">
+                            Based on your last {{ trends.current_window.book_count }} completed
+                            book{% if trends.current_window.book_count != 1 %}s{% endif %}
+                            ({{ trends.current_window.start_date.strftime('%d %b %Y') }}
+                            – {{ trends.current_window.end_date.strftime('%d %b %Y') }}).
+                            Only genres that appear repeatedly in that window are shown.
+                        </p>
+                    {% endif %}
                 </div>
             </div>
+        {% endif %}
+
+        {% if trends.reread_suggestions %}
+            <div class="card mb-4 trends-rereads-card">
+                <div class="card-body">
+                    <h2 class="h5 card-title mb-2">Books you might want to reread</h2>
+                    <p class="trends-current-hint mb-3">
+                        Older completed books whose genres overlap with what you're into right now,
+                        sorted by overlap and then by how long ago you read them.
+                    </p>
+                    <ul class="trends-reread-list">
+                        {% for r in trends.reread_suggestions %}
+                            <li class="trends-reread-item">
+                                <div class="trends-reread-main">
+                                    <a href="#" data-book-link
+                                       data-category="completed"
+                                       data-book-id="{{ r.id }}"
+                                       class="trends-reread-title">{{ r.book }}</a>
+                                    <span class="trends-reread-date">{{ r.date.strftime('%d %b %Y') }}</span>
+                                </div>
+                                <div class="trends-badge-row trends-reread-badges">
+                                    {% for g in r.matched_genres %}
+                                        <span class="trends-genre-badge">
+                                            <span class="trends-genre-name">{{ g }}</span>
+                                        </span>
+                                    {% endfor %}
+                                </div>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        {% endif %}
+
+        {% if trends.charts %}
+            {% set ch = trends.charts %}
+            <section class="trends-charts mb-4">
+                <h2 class="h5 mb-3">Reading evolution</h2>
+                <p class="trends-meta mb-3">
+                    Bucketed by {{ ch.unit_label }}. Hover any point for the exact value.
+                </p>
+
+                <div class="trends-chart-card">
+                    <div class="trends-chart-header">
+                        <h3 class="trends-chart-title">Reading volume</h3>
+                        <span class="trends-chart-sub">books finished per {{ ch.unit_label }}</span>
+                    </div>
+                    <svg class="trends-chart-svg" viewBox="0 0 {{ ch.width }} {{ ch.height }}"
+                         role="img" aria-label="Books completed per {{ ch.unit_label }} over time"
+                         preserveAspectRatio="none">
+                        {# Y-axis gridlines + labels #}
+                        {% for t in ch.volume.y_ticks %}
+                            <line class="trends-chart-grid"
+                                  x1="{{ ch.plot.left }}" x2="{{ ch.plot.right }}"
+                                  y1="{{ t.y }}" y2="{{ t.y }}" />
+                            <text class="trends-chart-axis-label"
+                                  x="{{ ch.plot.left - 6 }}" y="{{ t.y + 4 }}"
+                                  text-anchor="end">{{ t.value }}</text>
+                        {% endfor %}
+                        {# X-axis labels #}
+                        {% for t in ch.x_ticks %}
+                            <text class="trends-chart-axis-label"
+                                  x="{{ t.x }}" y="{{ ch.plot.bottom + 18 }}"
+                                  text-anchor="middle">{{ t.label }}</text>
+                        {% endfor %}
+                        {# X-axis base line #}
+                        <line class="trends-chart-axis"
+                              x1="{{ ch.plot.left }}" x2="{{ ch.plot.right }}"
+                              y1="{{ ch.plot.bottom }}" y2="{{ ch.plot.bottom }}" />
+                        {# Volume line + area #}
+                        <polyline class="trends-chart-line trends-chart-line-volume"
+                                  points="{{ ch.volume.polyline }}"
+                                  fill="none" />
+                        {% for p in ch.volume.points %}
+                            <circle class="trends-chart-dot"
+                                    cx="{{ p.x }}" cy="{{ p.y }}" r="3" fill="#6B0F1A">
+                                <title>{{ ch.buckets[loop.index0].full }}: {{ p.value }} book{% if p.value != 1 %}s{% endif %}</title>
+                            </circle>
+                        {% endfor %}
+                    </svg>
+                </div>
+
+                <div class="trends-chart-card">
+                    <div class="trends-chart-header">
+                        <h3 class="trends-chart-title">Top genres over time</h3>
+                        <span class="trends-chart-sub">{{ ch.genres.lines | length }} most-read genres, per {{ ch.unit_label }}</span>
+                    </div>
+                    <svg class="trends-chart-svg" viewBox="0 0 {{ ch.width }} {{ ch.height }}"
+                         role="img" aria-label="Top genres tracked per {{ ch.unit_label }} over time"
+                         preserveAspectRatio="none">
+                        {% for t in ch.genres.y_ticks %}
+                            <line class="trends-chart-grid"
+                                  x1="{{ ch.plot.left }}" x2="{{ ch.plot.right }}"
+                                  y1="{{ t.y }}" y2="{{ t.y }}" />
+                            <text class="trends-chart-axis-label"
+                                  x="{{ ch.plot.left - 6 }}" y="{{ t.y + 4 }}"
+                                  text-anchor="end">{{ t.value }}</text>
+                        {% endfor %}
+                        {% for t in ch.x_ticks %}
+                            <text class="trends-chart-axis-label"
+                                  x="{{ t.x }}" y="{{ ch.plot.bottom + 18 }}"
+                                  text-anchor="middle">{{ t.label }}</text>
+                        {% endfor %}
+                        <line class="trends-chart-axis"
+                              x1="{{ ch.plot.left }}" x2="{{ ch.plot.right }}"
+                              y1="{{ ch.plot.bottom }}" y2="{{ ch.plot.bottom }}" />
+                        {% for line in ch.genres.lines %}
+                            <polyline class="trends-chart-line"
+                                      points="{{ line.polyline }}"
+                                      fill="none" stroke="{{ line.color }}" />
+                            {% for p in line.points %}
+                                <circle class="trends-chart-dot"
+                                        cx="{{ p.x }}" cy="{{ p.y }}" r="2.5"
+                                        fill="{{ line.color }}">
+                                    <title>{{ line.genre }} · {{ ch.buckets[loop.index0].full }}: {{ p.value }}</title>
+                                </circle>
+                            {% endfor %}
+                        {% endfor %}
+                    </svg>
+                    <ul class="trends-chart-legend">
+                        {% for line in ch.genres.lines %}
+                            <li>
+                                <span class="trends-chart-legend-swatch" style="background: {{ line.color }};"></span>
+                                <span class="trends-chart-legend-label">{{ line.genre }}</span>
+                                <span class="trends-chart-legend-total">{{ line.total }}</span>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </section>
         {% endif %}
 
         <div class="trends-periods">
@@ -44,6 +182,18 @@
 
             <ol class="trends-period-list">
                 {% for period in trends.periods %}
+                    {% if period.gap_before_days %}
+                        {% if period.gap_before_days >= 365 %}
+                            {% set gap_label = (period.gap_before_days / 365.25) | round(1) ~ ' year break' %}
+                        {% elif period.gap_before_days >= 60 %}
+                            {% set gap_label = (period.gap_before_days / 30.4375) | round(0, 'floor') | int ~ ' month break' %}
+                        {% else %}
+                            {% set gap_label = period.gap_before_days ~ ' day break' %}
+                        {% endif %}
+                        <li class="trends-period-break" aria-hidden="true">
+                            <span class="trends-period-break-label">↯ {{ gap_label }}</span>
+                        </li>
+                    {% endif %}
                     <li class="trends-period-item {% if loop.last %}trends-period-current{% endif %}">
                         <div class="trends-period-header">
                             <span class="trends-period-range">
@@ -78,6 +228,78 @@
                 {% endfor %}
             </ol>
         </div>
+    {% endif %}
+
+    {% set missing_completed_count = trends.missing_completed | length %}
+    {% set missing_other_count = trends.missing_other | length %}
+    {% if missing_completed_count or missing_other_count %}
+        <section class="trends-missing-section">
+            <h2 class="h5 mb-2">Books without genres</h2>
+            <p class="trends-meta mb-3">
+                {{ missing_completed_count + missing_other_count }} book{% if (missing_completed_count + missing_other_count) != 1 %}s have{% else %} has{% endif %}
+                no genre tags. Adding genres improves the accuracy of your trends.
+            </p>
+
+            {% if missing_completed_count %}
+                <details class="trends-missing-group" open>
+                    <summary>
+                        <span class="trends-missing-summary-label">Completed</span>
+                        <span class="trends-missing-summary-count">{{ missing_completed_count }}</span>
+                    </summary>
+                    <ul class="trends-missing-list">
+                        {% for b in trends.missing_completed %}
+                            <li class="trends-missing-item">
+                                <a href="#" data-book-link
+                                   data-category="completed"
+                                   data-book-id="{{ b.id }}">{{ b.book }}</a>
+                                {% if b.date %}
+                                    <span class="trends-missing-meta">{{ b.date }}</span>
+                                {% endif %}
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </details>
+            {% endif %}
+
+            {% if missing_other_count %}
+                {% set tbr_missing = trends.missing_other | selectattr('category', 'equalto', 'tbr') | list %}
+                {% set unfinished_missing = trends.missing_other | selectattr('category', 'equalto', 'unfinished') | list %}
+                {% if tbr_missing %}
+                    <details class="trends-missing-group">
+                        <summary>
+                            <span class="trends-missing-summary-label">To Be Read</span>
+                            <span class="trends-missing-summary-count">{{ tbr_missing | length }}</span>
+                        </summary>
+                        <ul class="trends-missing-list">
+                            {% for b in tbr_missing %}
+                                <li class="trends-missing-item">
+                                    <a href="#" data-book-link
+                                       data-category="tbr"
+                                       data-book-id="{{ b.id }}">{{ b.book }}</a>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    </details>
+                {% endif %}
+                {% if unfinished_missing %}
+                    <details class="trends-missing-group">
+                        <summary>
+                            <span class="trends-missing-summary-label">Unfinished</span>
+                            <span class="trends-missing-summary-count">{{ unfinished_missing | length }}</span>
+                        </summary>
+                        <ul class="trends-missing-list">
+                            {% for b in unfinished_missing %}
+                                <li class="trends-missing-item">
+                                    <a href="#" data-book-link
+                                       data-category="unfinished"
+                                       data-book-id="{{ b.id }}">{{ b.book }}</a>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    </details>
+                {% endif %}
+            {% endif %}
+        </section>
     {% endif %}
 </div>
 {% endblock %}

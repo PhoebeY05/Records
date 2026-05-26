@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Detailed Analytics Report</title>
+    <style>
+        @page {
+            size: Letter;
+            margin: 0.55in;
+        }
+
+        * {
+            box-sizing: border-box;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            background: #efeae4;
+            color: #3a2a25;
+            font-family: Georgia, "Times New Roman", serif;
+        }
+
+        body {
+            font-size: 13px;
+            line-height: 1.45;
+        }
+
+        .report {
+            width: 100%;
+        }
+
+        .page-break {
+            break-after: page;
+            page-break-after: always;
+        }
+
+        .hero {
+            padding: 1.25rem 1.3rem;
+            border-radius: 20px;
+            background: linear-gradient(135deg, #6B0F1A 0%, #8a1828 48%, #b08968 100%);
+            color: #fff8f5;
+            box-shadow: 0 10px 28px rgba(49, 8, 31, 0.14);
+        }
+
+        .hero-eyebrow {
+            margin: 0;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+            font-size: 0.74rem;
+            opacity: 0.88;
+        }
+
+        .hero-title {
+            margin: 0.3rem 0 0.45rem;
+            font-size: 2.1rem;
+            line-height: 1.05;
+            font-weight: 700;
+        }
+
+        .hero-copy {
+            margin: 0;
+            max-width: 44rem;
+            color: rgba(255, 248, 245, 0.92);
+            font-size: 0.98rem;
+        }
+
+        .hero-meta {
+            margin-top: 0.9rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.45rem;
+        }
+
+        .hero-meta span {
+            display: inline-flex;
+            align-items: center;
+            min-height: 30px;
+            padding: 0.35rem 0.7rem;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.12);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            font-size: 0.82rem;
+        }
+
+        .section {
+            margin-top: 1rem;
+            padding: 1rem 1.05rem;
+            border: 1px solid #e0d7cf;
+            border-radius: 16px;
+            background: #fff;
+            box-shadow: 0 8px 18px rgba(49, 8, 31, 0.04);
+            break-inside: avoid;
+            page-break-inside: avoid;
+        }
+
+        .section-title {
+            margin: 0 0 0.7rem;
+            padding-bottom: 0.35rem;
+            border-bottom: 1px solid #e8ddd4;
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: #3a2a25;
+        }
+
+        .section-note {
+            margin: -0.2rem 0 0.8rem;
+            color: #6c757d;
+            font-size: 0.88rem;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.8rem;
+        }
+
+        .stat-card {
+            min-height: 92px;
+            padding: 0.92rem 0.95rem;
+            border-radius: 14px;
+            border: 1px solid #e0d7cf;
+            background: linear-gradient(180deg, #fff 0%, #fffaf6 100%);
+        }
+
+        .stat-value {
+            font-size: 1.9rem;
+            line-height: 1.05;
+            font-weight: 700;
+            color: #6B0F1A;
+        }
+
+        .stat-label {
+            margin-top: 0.2rem;
+            font-size: 0.84rem;
+            font-weight: 600;
+            color: #5a4a45;
+        }
+
+        .stat-sublabel {
+            display: block;
+            margin-top: 0.12rem;
+            font-size: 0.76rem;
+            color: #8a7c75;
+            font-weight: 400;
+        }
+
+        .split-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.9rem;
+        }
+
+        .journey-card,
+        .mix-card,
+        .plain-card {
+            border: 1px solid #e0d7cf;
+            border-radius: 14px;
+            background: linear-gradient(180deg, #fff 0%, #fffdfb 100%);
+            padding: 0.95rem;
+            break-inside: avoid;
+            page-break-inside: avoid;
+        }
+
+        .journey-row {
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+        }
+
+        .journey-endpoint {
+            flex: 0 0 auto;
+            min-width: 118px;
+        }
+
+        .journey-endpoint:last-child {
+            text-align: right;
+        }
+
+        .journey-label {
+            font-size: 0.76rem;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: #8a7c75;
+        }
+
+        .journey-date {
+            margin-top: 0.14rem;
+            font-size: 1rem;
+            font-weight: 700;
+            color: #3a2a25;
+        }
+
+        .journey-track {
+            flex: 1 1 auto;
+            position: relative;
+            min-height: 78px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .journey-line {
+            position: absolute;
+            top: 50%;
+            left: 0;
+            right: 0;
+            height: 4px;
+            border-radius: 999px;
+            background: linear-gradient(to right, #e0d7cf, #6B0F1A, #e0d7cf);
+            transform: translateY(-50%);
+        }
+
+        .journey-duration {
+            position: relative;
+            z-index: 1;
+            padding: 0.5rem 0.75rem;
+            border-radius: 999px;
+            background: #fbf4ec;
+            border: 1px solid #e7d7d0;
+            font-size: 0.9rem;
+            text-align: center;
+        }
+
+        .journey-duration strong {
+            font-size: 1.2rem;
+            color: #6B0F1A;
+        }
+
+        .journey-duration span {
+            display: block;
+            color: #8a7c75;
+            font-size: 0.76rem;
+            margin-top: 0.12rem;
+        }
+
+        .note-box {
+            margin-top: 0.7rem;
+            padding: 0.7rem 0.8rem;
+            border-radius: 12px;
+            background: #fff8f5;
+            border: 1px solid #ead9d1;
+            color: #6c757d;
+            font-size: 0.84rem;
+        }
+
+        .mix-layout {
+            display: grid;
+            grid-template-columns: minmax(220px, 280px) 1fr;
+            gap: 1rem;
+            align-items: start;
+        }
+
+        .pie-wrap {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .pie-chart {
+            position: relative;
+            width: 250px;
+            aspect-ratio: 1 / 1;
+            border-radius: 50%;
+            box-shadow: inset 0 0 0 1px #e0d7cf;
+            overflow: hidden;
+            background: conic-gradient(
+                {% for s in stats.status_breakdown %}
+                    {{ s.color }} {{ s.start_pct }}% {{ s.end_pct }}%
+                    {% if not loop.last %}, {% endif %}
+                {% endfor %}
+            );
+        }
+
+        .pie-chart::after {
+            content: "";
+            position: absolute;
+            inset: 18%;
+            border-radius: 50%;
+            background: linear-gradient(180deg, #fffcf8 0%, #fbf4e2 100%);
+            box-shadow: inset 0 0 0 1px rgba(224, 215, 207, 0.8);
+        }
+
+        .pie-center {
+            position: absolute;
+            inset: 0;
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+        }
+
+        .pie-center-value {
+            display: block;
+            font-size: 2.1rem;
+            font-weight: 700;
+            color: #6B0F1A;
+            line-height: 1;
+        }
+
+        .pie-center-label {
+            margin-top: 0.25rem;
+            font-size: 0.74rem;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: #8a7c75;
+        }
+
+        .legend {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 0.55rem;
+        }
+
+        .legend li {
+            display: grid;
+            grid-template-columns: 14px 1fr auto auto;
+            align-items: center;
+            column-gap: 0.45rem;
+            font-size: 0.88rem;
+        }
+
+        .legend-swatch {
+            width: 14px;
+            height: 14px;
+            border-radius: 3px;
+        }
+
+        .legend-label {
+            font-weight: 600;
+            color: #3a2a25;
+        }
+
+        .legend-count {
+            color: #3a2a25;
+            font-weight: 600;
+        }
+
+        .legend-percent {
+            color: #8a7c75;
+            font-size: 0.82rem;
+        }
+
+        .mix-mini-grid {
+            margin-top: 0.9rem;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.8rem;
+        }
+
+        .mini-card {
+            padding: 0.85rem 0.9rem;
+            border-radius: 12px;
+            border: 1px solid #e7d7d0;
+            background: #fff8f5;
+        }
+
+        .mini-value {
+            font-size: 1.35rem;
+            font-weight: 700;
+            color: #6B0F1A;
+            line-height: 1.05;
+        }
+
+        .mini-label {
+            margin-top: 0.2rem;
+            font-size: 0.84rem;
+            font-weight: 600;
+            color: #5a4a45;
+        }
+
+        .mini-subtitle {
+            margin-top: 0.12rem;
+            color: #8a7c75;
+            font-size: 0.74rem;
+        }
+
+        .bar-list {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 0.46rem;
+        }
+
+        .bar-row {
+            display: grid;
+            grid-template-columns: 70px 1fr auto auto;
+            align-items: center;
+            column-gap: 0.65rem;
+            font-size: 0.9rem;
+        }
+
+        .bar-label {
+            color: #3a2a25;
+            font-weight: 600;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .bar-label-wide {
+            white-space: normal;
+        }
+
+        .bar-row-wide {
+            grid-template-columns: minmax(120px, 1.2fr) 2fr auto auto;
+        }
+
+        .bar-track {
+            height: 12px;
+            background: #f0e6dd;
+            border-radius: 999px;
+            overflow: hidden;
+        }
+
+        .bar-fill {
+            height: 100%;
+            border-radius: 999px;
+            background: #6B0F1A;
+            min-width: 2px;
+        }
+
+        .bar-fill-accent {
+            background: linear-gradient(to right, #8a1828, #6B0F1A);
+        }
+
+        .bar-fill-secondary {
+            background: #b08968;
+        }
+
+        .bar-count {
+            color: #3a2a25;
+            font-weight: 600;
+            min-width: 1.5rem;
+            text-align: right;
+        }
+
+        .bar-percent {
+            color: #8a7c75;
+            font-size: 0.8rem;
+            min-width: 3rem;
+            text-align: right;
+        }
+
+        .month-chart {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 0.35rem;
+            align-items: end;
+            height: 190px;
+            padding: 0.35rem 0.1rem 0;
+            border-bottom: 1px solid #e0d7cf;
+        }
+
+        .month-col {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100%;
+            gap: 0.25rem;
+        }
+
+        .month-bar-wrap {
+            flex: 1;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            align-items: center;
+            position: relative;
+        }
+
+        .month-count {
+            font-size: 0.68rem;
+            color: #6c757d;
+            margin-bottom: 2px;
+            min-height: 1em;
+        }
+
+        .month-bar {
+            width: 72%;
+            min-height: 2px;
+            background: linear-gradient(to top, #6B0F1A, #8a1828);
+            border-radius: 4px 4px 0 0;
+        }
+
+        .month-label {
+            font-size: 0.62rem;
+            color: #5a4a45;
+            text-align: center;
+            white-space: nowrap;
+        }
+
+        .pace-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 0.75rem;
+            margin-top: 0.85rem;
+        }
+
+        .pace-card {
+            padding: 0.88rem 0.92rem;
+            border-radius: 12px;
+            border: 1px solid #e0d7cf;
+            background: linear-gradient(180deg, #fff 0%, #fffaf6 100%);
+        }
+
+        .pace-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #6B0F1A;
+            line-height: 1.05;
+        }
+
+        .pace-label {
+            margin-top: 0.16rem;
+            font-size: 0.84rem;
+            font-weight: 600;
+            color: #5a4a45;
+        }
+
+        .pace-subtitle {
+            margin-top: 0.12rem;
+            color: #8a7c75;
+            font-size: 0.74rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .two-col {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.9rem;
+        }
+
+        .list-card {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .list-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            gap: 0.5rem;
+            padding: 0.32rem 0;
+            border-bottom: 1px dashed #ecdfd4;
+            font-size: 0.9rem;
+        }
+
+        .list-row:last-child {
+            border-bottom: none;
+        }
+
+        .list-title {
+            color: #3a2a25;
+            font-weight: 600;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .list-meta {
+            color: #8a7c75;
+            font-size: 0.82rem;
+            white-space: nowrap;
+        }
+
+        .empty-state {
+            margin-top: 1rem;
+            padding: 1rem 1.1rem;
+            border-radius: 14px;
+            border: 1px solid #e0d7cf;
+            background: #fff;
+        }
+
+        .empty-state strong {
+            display: block;
+            margin-bottom: 0.25rem;
+            font-size: 1rem;
+            color: #6B0F1A;
+        }
+
+        .empty-state p {
+            margin: 0;
+            color: #6c757d;
+        }
+
+        @media print {
+            .page-break {
+                break-after: page;
+            }
+        }
+    </style>
+</head>
+<body>
+    <main class="report">
+        <section class="hero">
+            <p class="hero-eyebrow">Detailed analytics report</p>
+            <h1 class="hero-title">Reading Records</h1>
+            <p class="hero-copy">
+                A printable snapshot of your reading library, combining the high-level summary with deeper charts, time trends, and reading patterns.
+            </p>
+            <div class="hero-meta">
+                <span>Generated {{ generated_on }}</span>
+                <span>{{ stats.totals.all }} books total</span>
+                <span>{{ stats.totals.completed_with_date }} dated completions</span>
+            </div>
+        </section>
+
+        {% if stats.totals.all == 0 %}
+            <section class="empty-state">
+                <strong>Nothing to analyse yet.</strong>
+                <p>Add books to your library and mark some as completed to generate a fuller report.</p>
+            </section>
+        {% else %}
+            <section class="section">
+                <h2 class="section-title">Key stats</h2>
+                <div class="summary-grid">
+                    <div class="stat-card">
+                        <div class="stat-value">{{ stats.totals.all }}</div>
+                        <div class="stat-label">Books in library</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">{{ stats.ratios.completion_rate }}%</div>
+                        <div class="stat-label">Completion rate
+                            <span class="stat-sublabel">completed / all books</span>
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">
+                            {% if stats.pace.avg_days is not none %}
+                                {{ stats.pace.avg_days }}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </div>
+                        <div class="stat-label">Avg days per book
+                            {% if stats.pace.avg_days is none %}
+                                <span class="stat-sublabel">Not enough completed books yet</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">{{ stats.totals.distinct_genres }}</div>
+                        <div class="stat-label">Distinct genres</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">{{ stats.totals.distinct_series }}</div>
+                        <div class="stat-label">Series followed</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">{{ stats.totals.rereads_total }}</div>
+                        <div class="stat-label">Rereads
+                            {% if stats.totals.reread_books %}
+                                <span class="stat-sublabel">Across {{ stats.totals.reread_books }} book{% if stats.totals.reread_books != 1 %}s{% endif %}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <div class="split-grid">
+                <section class="journey-card">
+                    <h2 class="section-title">Your reading journey</h2>
+                    {% if stats.span.start_date %}
+                        <div class="journey-row">
+                            <div class="journey-endpoint">
+                                <div class="journey-label">First completed</div>
+                                <div class="journey-date">{{ stats.span.start_date.strftime('%d %b %Y') }}</div>
+                            </div>
+                            <div class="journey-track">
+                                <div class="journey-line"></div>
+                                <div class="journey-duration">
+                                    <strong>{{ stats.span.days }}</strong> day{% if stats.span.days != 1 %}s{% endif %}
+                                    <span>
+                                        ≈ {{ stats.span.years }} year{% if stats.span.years != 1 %}s{% endif %}
+                                        · {{ stats.span.months }} month{% if stats.span.months != 1 %}s{% endif %}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="journey-endpoint">
+                                <div class="journey-label">Most recent</div>
+                                <div class="journey-date">{{ stats.span.end_date.strftime('%d %b %Y') }}</div>
+                            </div>
+                        </div>
+                    {% else %}
+                        <div class="note-box">
+                            No parseable completion dates yet, so the timeline sections stay empty until there are dated completions to compare.
+                        </div>
+                    {% endif %}
+                    {% if stats.totals.completed_without_date %}
+                        <div class="note-box">
+                            {{ stats.totals.completed_without_date }} completed book{% if stats.totals.completed_without_date != 1 %}s have{% else %} has{% endif %} no parseable date and are excluded from time-based charts.
+                        </div>
+                    {% endif %}
+                </section>
+
+                <section class="mix-card">
+                    <h2 class="section-title">Library mix</h2>
+                    <div class="mix-layout">
+                        <div class="pie-wrap">
+                            <div class="pie-chart">
+                                <div class="pie-center">
+                                    <strong class="pie-center-value">{{ stats.totals.all }}</strong>
+                                    <span class="pie-center-label">Books</span>
+                                </div>
+                            </div>
+                            <p class="section-note" style="text-align:center; margin-top:0.7rem;">
+                                Completed books make up {{ stats.ratios.completion_rate }}% of your library.
+                            </p>
+                        </div>
+                        <div>
+                            <ul class="legend">
+                                {% for s in stats.status_breakdown %}
+                                    <li>
+                                        <span class="legend-swatch" style="background: {{ s.color }};"></span>
+                                        <span class="legend-label">{{ s.label }}</span>
+                                        <span class="legend-count">{{ s.count }}</span>
+                                        <span class="legend-percent">({{ s.percent }}%)</span>
+                                    </li>
+                                {% endfor %}
+                            </ul>
+
+                            <div class="mix-mini-grid">
+                                <div class="mini-card">
+                                    <div class="mini-value">{{ stats.totals.completed_with_date }}</div>
+                                    <div class="mini-label">Completed with dates</div>
+                                    <div class="mini-subtitle">{{ stats.totals.completed_without_date }} excluded from time charts</div>
+                                </div>
+                                <div class="mini-card">
+                                    <div class="mini-value">{{ stats.ratios.genre_coverage }}%</div>
+                                    <div class="mini-label">Genre coverage</div>
+                                    <div class="mini-subtitle">Completed books with at least one genre tag</div>
+                                </div>
+                                <div class="mini-card">
+                                    <div class="mini-value">{{ stats.ratios.series_coverage }}%</div>
+                                    <div class="mini-label">Series coverage</div>
+                                    <div class="mini-subtitle">Completed books linked to a series</div>
+                                </div>
+                                <div class="mini-card">
+                                    <div class="mini-value">{{ stats.ratios.reread_share }}%</div>
+                                    <div class="mini-label">Reread share</div>
+                                    <div class="mini-subtitle">Share of completed books with at least one reread</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+
+            <div class="page-break"></div>
+
+            <section class="section">
+                <h2 class="section-title">Completion timeline</h2>
+                <p class="section-note">These charts show when your finished books were added to the library and where the biggest reading bursts happened.</p>
+
+                <div class="split-grid">
+                    {% if stats.year_counts %}
+                        <div class="plain-card">
+                            <h3 class="section-title" style="margin-top:0;">Books completed per year</h3>
+                            {% if stats.busiest_year %}
+                                <p class="section-note">Biggest year: <strong>{{ stats.busiest_year.year }}</strong> with {{ stats.busiest_year.count }} book{% if stats.busiest_year.count != 1 %}s{% endif %}.</p>
+                            {% endif %}
+                            <ul class="bar-list">
+                                {% for y in stats.year_counts %}
+                                    <li class="bar-row">
+                                        <span class="bar-label">{{ y.year }}</span>
+                                        <div class="bar-track">
+                                            <div class="bar-fill" style="width: {{ y.percent }}%;"></div>
+                                        </div>
+                                        <span class="bar-count">{{ y.count }}</span>
+                                        <span class="bar-percent">{{ y.percent }}%</span>
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    {% endif %}
+
+                    {% if stats.month_counts %}
+                        <div class="plain-card">
+                            <h3 class="section-title" style="margin-top:0;">Last 12 months</h3>
+                            {% if stats.busiest_month %}
+                                <p class="section-note">Busiest month overall: <strong>{{ stats.busiest_month.label }}</strong> with {{ stats.busiest_month.count }} book{% if stats.busiest_month.count != 1 %}s{% endif %}.</p>
+                            {% endif %}
+                            <div class="month-chart">
+                                {% for m in stats.month_counts %}
+                                    <div class="month-col" title="{{ m.label }} — {{ m.count }} book{% if m.count != 1 %}s{% endif %}">
+                                        <div class="month-bar-wrap">
+                                            <span class="month-count">{{ m.count }}</span>
+                                            <div class="month-bar" style="height: {{ m.percent }}%;"></div>
+                                        </div>
+                                        <div class="month-label">{{ m.short }}</div>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+
+                {% if stats.pace.avg_days is not none %}
+                    <div class="pace-grid">
+                        <div class="pace-card">
+                            <div class="pace-value">{{ stats.pace.avg_days }}</div>
+                            <div class="pace-label">Average days per book</div>
+                        </div>
+                        <div class="pace-card">
+                            <div class="pace-value">{{ stats.pace.median_days }}</div>
+                            <div class="pace-label">Median days per book</div>
+                        </div>
+                        {% if stats.pace.fastest %}
+                            <div class="pace-card">
+                                <div class="pace-value">{{ stats.pace.fastest.days }}d</div>
+                                <div class="pace-label">Fastest finish</div>
+                                <div class="pace-subtitle">{{ stats.pace.fastest.book }}</div>
+                            </div>
+                        {% endif %}
+                        {% if stats.pace.slowest %}
+                            <div class="pace-card">
+                                <div class="pace-value">{{ stats.pace.slowest.days }}d</div>
+                                <div class="pace-label">Longest finish</div>
+                                <div class="pace-subtitle">{{ stats.pace.slowest.book }}</div>
+                            </div>
+                        {% endif %}
+                    </div>
+                {% else %}
+                    <div class="note-box">
+                        Not enough completed books with a `days` value yet to calculate pace statistics.
+                    </div>
+                {% endif %}
+            </section>
+
+            <div class="page-break"></div>
+
+            <section class="section">
+                <h2 class="section-title">Reading profile</h2>
+                <p class="section-note">Genres, series, and rereads show what you come back to most often.</p>
+
+                <div class="two-col">
+                    {% if stats.top_genres %}
+                        <div class="plain-card">
+                            <h3 class="section-title" style="margin-top:0;">Top genres</h3>
+                            <p class="section-note">Your completed books lean toward these genres.</p>
+                            <ul class="bar-list">
+                                {% for g in stats.top_genres %}
+                                    <li class="bar-row bar-row-wide">
+                                        <span class="bar-label bar-label-wide">{{ g.genre }}</span>
+                                        <div class="bar-track">
+                                            <div class="bar-fill bar-fill-accent" style="width: {{ g.bar_percent }}%;"></div>
+                                        </div>
+                                        <span class="bar-count">{{ g.count }}</span>
+                                        <span class="bar-percent">{{ g.percent }}%</span>
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    {% endif %}
+
+                    {% if stats.top_series %}
+                        <div class="plain-card">
+                            <h3 class="section-title" style="margin-top:0;">Most read series</h3>
+                            <ul class="bar-list">
+                                {% for s in stats.top_series %}
+                                    <li class="bar-row bar-row-wide">
+                                        <span class="bar-label bar-label-wide">{{ s.series }}</span>
+                                        <div class="bar-track">
+                                            <div class="bar-fill bar-fill-secondary" style="width: {{ s.bar_percent }}%;"></div>
+                                        </div>
+                                        <span class="bar-count">{{ s.count }}</span>
+                                        <span class="bar-percent">&nbsp;</span>
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    {% endif %}
+                </div>
+
+                {% if stats.top_rereads %}
+                    <div class="plain-card" style="margin-top:0.9rem;">
+                        <h3 class="section-title" style="margin-top:0;">Most reread books</h3>
+                        <ul class="list-card">
+                            {% for r in stats.top_rereads %}
+                                <li class="list-row">
+                                    <span class="list-title">{{ r.book }}</span>
+                                    <span class="list-meta">×{{ r.reread }} reread{% if r.reread != 1 %}s{% endif %}</span>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                {% endif %}
+            </section>
+        {% endif %}
+    </main>
+</body>
+</html>
