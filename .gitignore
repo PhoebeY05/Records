@@ -19,8 +19,11 @@ ENV/
 instance/
 books.db
 records.db
+shows.db
 *.sqlite3
 flask_session/
+mal_relations_cache.json
+mal_animelist_*.xml
 
 # macOS
 .DS_Store

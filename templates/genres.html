@@ -7,12 +7,12 @@
 {% block main %}
 <div class="container book-list-page mt-4 genres-page">
     <h1 class="title mb-2">Genres</h1>
-    <p class="genres-subtitle mb-4">Every genre in your library and the books in each.</p>
+    <p class="genres-subtitle mb-4">Every genre in your library and the {{ site_record_label_plural|lower }} in each.</p>
 
     {% if genres.total_distinct == 0 %}
         <div class="alert alert-info" role="alert">
             <strong>No genres tagged yet.</strong>
-            Add genre tags to your books to see them grouped here.
+            Add genre tags to your {{ site_record_label_plural|lower }} to see them grouped here.
         </div>
     {% else %}
         <div class="genres-summary mb-4">
@@ -23,11 +23,11 @@
                 </div>
                 <div class="genres-stat-pill">
                     <strong>{{ genres.total_tagged }}</strong>
-                    book{% if genres.total_tagged != 1 %}s{% endif %} tagged
+                    {{ site_record_label|lower if genres.total_tagged == 1 else site_record_label_plural|lower }} tagged
                 </div>
                 {% if genres.total_untagged %}
                     <div class="genres-stat-pill genres-stat-pill-warn">
-                        {{ genres.total_untagged }} book{% if genres.total_untagged != 1 %}s have{% else %} has{% endif %} no genres
+                        {{ genres.total_untagged }} {{ site_record_label|lower if genres.total_untagged == 1 else site_record_label_plural|lower }} {% if genres.total_untagged != 1 %}have{% else %}has{% endif %} no genres
                     </div>
                 {% endif %}
             </div>
@@ -47,8 +47,8 @@
             <div class="genres-filter-field">
                 <label for="genresSortSelect">Sort by</label>
                 <select id="genresSortSelect" class="form-select georgia">
-                    <option value="total-desc" selected>Most books</option>
-                    <option value="total-asc">Fewest books</option>
+                    <option value="total-desc" selected>Most {{ site_record_label_plural|lower }}</option>
+                    <option value="total-asc">Fewest {{ site_record_label_plural|lower }}</option>
                     <option value="name-asc">Name (A–Z)</option>
                     <option value="name-desc">Name (Z–A)</option>
                     <option value="completed-desc">Most completed</option>
@@ -70,7 +70,7 @@
             {% endif %}
 
             <div class="genres-filter-field genres-filter-min">
-                <label for="genresMinInput">Min books</label>
+                <label for="genresMinInput">Min {{ site_record_label_plural|lower }}</label>
                 <input id="genresMinInput" class="form-control georgia"
                        type="number" min="0" step="1" value="0">
             </div>
@@ -116,7 +116,7 @@
                                 </span>
                                 <span class="genre-card-total">
                                     <span class="genre-card-total-number">{{ g.total }}</span>
-                                    <span class="genre-card-total-label">book{% if g.total != 1 %}s{% endif %}</span>
+                                    <span class="genre-card-total-label">{{ site_record_label_plural|lower }}</span>
                                 </span>
                             </div>
                             {% if g.completed_count or g.tbr_count or g.unfinished_count %}
@@ -130,7 +130,7 @@
                         <div class="genre-card-body">
                             {% for category, label, books in [
                                 ('completed', 'Completed', g.completed),
-                                ('tbr', 'To Be Read', g.tbr),
+                                ('tbr', site_tbr_label, g.tbr),
                                 ('unfinished', 'Unfinished', g.unfinished)
                             ] %}
                                 {% if books %}

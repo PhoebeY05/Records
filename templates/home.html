@@ -25,12 +25,12 @@
     <section class="home-hero card shadow-sm mb-4">
         <div class="card-body home-hero-body">
             <div>
-                <p class="home-kicker mb-1">Reading dashboard</p>
+                <p class="home-kicker mb-1">{{ site_name }}</p>
                 <h1 class="home-hero-title mb-2">Home</h1>
                 <p class="home-subtitle mb-0">Scan recent adds, jump to a year, or switch categories without hunting through the page.</p>
             </div>
             <div class="home-actions d-flex flex-wrap gap-2">
-                <a class="btn btn-light home-action-btn home-action-primary" href="/add">Add Book</a>
+                <a class="btn btn-light home-action-btn home-action-primary" href="/add">Add {{ site_record_label }}</a>
                 <a class="btn btn-outline-light home-action-btn" href="#timeline-section">Jump to timeline</a>
             </div>
         </div>
@@ -56,7 +56,7 @@
         <div class="col-12 col-md-3">
             <div class="summary-card card shadow-sm h-100">
                 <div class="card-body">
-                    <p class="summary-label mb-1">To Be Read</p>
+                    <p class="summary-label mb-1">{{ site_tbr_label }}</p>
                     <h2 class="summary-value mb-0">{{ tbr_total_count }}</h2>
                 </div>
             </div>
@@ -80,7 +80,7 @@
             </div>
             <form action="/home" method="post" class="home-recents-form d-flex flex-wrap gap-2 align-items-center">
                 <select class="form-select home-select" id="inputGroupSelect04" name="duration">
-                    <option value="">Choose books added...</option>
+                    <option value="">Choose {{ site_record_label_plural|lower }} added...</option>
                     {% if option == "day" %}
                         <option value="day" selected>Today</option>
                     {% else %}
@@ -109,7 +109,7 @@
                         {% elif book.page == "unfinished" %}
                             {% set page_label = "Unfinished" %}
                         {% elif book.page == "tbr" %}
-                            {% set page_label = "To Be Read" %}
+                            {% set page_label = site_tbr_label %}
                         {% else %}
                             {% set page_label = book.page|upper %}
                         {% endif %}
@@ -130,7 +130,7 @@
                     {% endfor %}
                 </div>
             {% else %}
-                <p class="grey-text mb-0">No recent books selected yet.</p>
+                <p class="grey-text mb-0">No recent {{ site_record_label_plural|lower }} selected yet.</p>
             {% endif %}
         </div>
     </section>
@@ -152,7 +152,7 @@
                         <input value="{{ request.form.get('unfinished', current_year|string) }}" type="number" min="1900" max="2099" step="1" class="form-control" id="timeline-unfinished" name="unfinished">
                     </div>
                     <div class="timeline-year-group">
-                        <label class="form-label mb-1 small text-muted" for="timeline-tbr">To Be Read</label>
+                        <label class="form-label mb-1 small text-muted" for="timeline-tbr">{{ site_tbr_label }}</label>
                         <input value="{{ request.form.get('tbr', current_year|string) }}" type="number" min="1900" max="2099" step="1" class="form-control" id="timeline-tbr" name="tbr">
                     </div>
                     <div class="timeline-submit-group">
@@ -187,7 +187,7 @@
                                     {% endfor %}
                                 </ul>
                             {% else %}
-                                <p class="grey-text mb-0">No books marked Completed during this year.</p>
+                                <p class="grey-text mb-0">No {{ site_record_label_plural|lower }} marked Completed during this year.</p>
                             {% endif %}
                         </div>
                     </div>
@@ -216,7 +216,7 @@
                                     {% endfor %}
                                 </ul>
                             {% else %}
-                                <p class="grey-text mb-0">No books marked Unfinished during this year.</p>
+                                <p class="grey-text mb-0">No {{ site_record_label_plural|lower }} marked Unfinished during this year.</p>
                             {% endif %}
                         </div>
                     </div>
@@ -225,7 +225,7 @@
                 <div class="accordion-item">
                     <h2 class="accordion-header" id="tbrHeading">
                         <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#tbr" aria-expanded="false" aria-controls="tbr">
-                            <span class="me-2">To Be Read</span>
+                            <span class="me-2">{{ site_tbr_label }}</span>
                             <span class="badge series-book-category-tbr">{{ tbr_count }}</span>
                         </button>
                     </h2>
@@ -249,7 +249,7 @@
                                     {% endfor %}
                                 </ul>
                             {% else %}
-                                <p class="grey-text mb-0">No books marked To Be Read during this year.</p>
+                                <p class="grey-text mb-0">No {{ site_record_label_plural|lower }} marked {{ site_tbr_label }} during this year.</p>
                             {% endif %}
                         </div>
                     </div>

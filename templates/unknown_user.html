@@ -7,13 +7,13 @@
         <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js" integrity="sha384-I7E8VVD/ismYTF4hNIPjVp/Zjvgyol6VFvRkX/vR+Vc4jQkC+hVqc2pM8ODewa9r" crossorigin="anonymous"></script>
         <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.min.js" integrity="sha384-0pUGZvbkm6XF6gxjEnlmuGrJXVbNuzT9qBBavbLwCsOGabYfZo0T0to5eqruptLy" crossorigin="anonymous"></script>
         <link href="../static/styles.css" rel="stylesheet">
-        <link rel="icon" type="image/png" href="{{ url_for('static', filename='icon.png') }}">
+        <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='icon-books.svg') }}">
         <title>{% block title %}{% endblock %}</title>
     </head>
     <nav class="navbar navbar-expand-lg navbar-light bg georgia white-text">
         <div class="container-fluid">
-          <img src="../static/icon.png" height=40, width="40" class="me-3"/>
-          <a class="navbar-brand georgia white-text" href="#">Reading Records</a>
+          <img src="../static/icon-books.svg" height=40, width="40" class="me-3"/>
+          <a class="navbar-brand georgia white-text" href="#">Book Records</a>
           <div class="navbar-nav ms-auto mb-2 mb-lg-0">
             <form class = "nav-link" action="/register" method ="get">
                 <button class="btn my-2 my-sm-0 georgia white-text" type="submit">Register</button>

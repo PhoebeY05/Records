@@ -1,13 +1,13 @@
 {% extends "layout.html" %}
 
 {% block title %}
-    Add Books
+    Add {{ site_record_label_plural }}
 {% endblock %}
 
 {% block main %}
 <div class="container">
     {% for msg in get_flashed_messages() %}
-        {% if msg == 'Add Book Success!' %}
+        {% if msg == 'Add ' ~ site_record_label ~ ' Success!' %}
             <div class="alert alert-success alert-dismissible fade show mt-3" role="alert">
                 {{msg}}
                 <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
@@ -24,8 +24,8 @@
 <form action="/add" method="post" class="form-panel form-panel-wide">
     <h3 class="mb-3"><u>Mandatory Fields</u></h3>
     <div class="input-group mb-3">
-        <span class="input-group-text">Name of Book</span>
-        <input type="text" class="form-control" name="book" id="book-input" placeholder="Name of Book"/>
+        <span class="input-group-text">Name of {{ site_record_label }}</span>
+        <input type="text" class="form-control" name="book" id="book-input" placeholder="Name of {{ site_record_label }}"/>
     </div>
     <div class="input-group mb-3">
         <span class="input-group-text">Category</span>
@@ -33,17 +33,25 @@
             <option value="" selected>Select a category</option>
             <option value="completed">Completed</option>
             <option value="unfinished">Unfinished</option>
-            <option value="tbr">To Be Read</option>
+            <option value="tbr">{{ site_tbr_label }}</option>
         </select>
     </div>
     <div class="input-group mb-3">
         <span class="input-group-text">Status</span>
         <input name="status" class="form-control" list="datalistOptions" placeholder="Type or pick a status...">
         <datalist id="datalistOptions">
-            <option value="Finished">
-            <option value="Left Extras">
-            <option value="Finishing Soon">
-            <option value="Uncompleted">
+            {% if site_mode == "shows" %}
+                <option value="Completed">
+                <option value="Watching">
+                <option value="On Hold">
+                <option value="Dropped">
+                <option value="Plan to Watch">
+            {% else %}
+                <option value="Finished">
+                <option value="Left Extras">
+                <option value="Finishing Soon">
+                <option value="Uncompleted">
+            {% endif %}
         </datalist>
     </div>
 
@@ -59,12 +67,12 @@
     </div>
     <div class="input-group mb-3">
         <span class="input-group-text">Series Name</span>
-        <input type="text" class="form-control" name="series" placeholder='Fill in if the book is part of a series'/>
+        <input type="text" class="form-control" name="series" placeholder='Fill in if the {{ site_record_label|lower }} is part of a series'/>
     </div>
 
     <div class="form-actions justify-content-between">
         <a class="btn btn-outline-secondary" href="/import">Import from file…</a>
-        <button class="btn grey" type="submit">Add Book</button>
+        <button class="btn grey" type="submit">Add {{ site_record_label }}</button>
     </div>
 </form>
 

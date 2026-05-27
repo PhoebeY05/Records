@@ -8,10 +8,10 @@
     <form method="post" name="options" class="book-list-filters series-filters mb-3">
         <div class="row g-2 align-items-stretch justify-content-center">
             <div class="col-6 col-sm-auto">
-                <input type="number" min="1" name="min_books" class="form-control series-filter-input" placeholder="Min books" value="{{ selected_min or '' }}">
+                <input type="number" min="1" name="min_books" class="form-control series-filter-input" placeholder="Min {{ site_record_label_plural|lower }}" value="{{ selected_min or '' }}">
             </div>
             <div class="col-6 col-sm-auto">
-                <input type="number" min="1" name="max_books" class="form-control series-filter-input" placeholder="Max books" value="{{ selected_max or '' }}">
+                <input type="number" min="1" name="max_books" class="form-control series-filter-input" placeholder="Max {{ site_record_label_plural|lower }}" value="{{ selected_max or '' }}">
             </div>
             <div class="col-6 col-sm-auto">
                 <button type="submit" class="btn hidden-info clear-filter-btn w-100">Apply</button>
@@ -22,18 +22,18 @@
         </div>
     </form>
     {% if total_series > 0 %}
-        <p class="grey-text text-center mb-4">{{ total_series }} series · {{ total_books }} book{{ "s" if total_books != 1 else "" }}</p>
+        <p class="grey-text text-center mb-4">{{ total_series }} series · {{ total_books }} {{ site_record_label_plural|lower }}</p>
     {% endif %}
 
     {% if series_list|length == 0 %}
-        <p class="grey-text text-center my-5">No series yet — any book with a Series field will show up here.</p>
+        <p class="grey-text text-center my-5">No series yet — any {{ site_record_label|lower }} with a Series field will show up here.</p>
     {% else %}
         <div class="series-grid">
             {% for series_name, books in series_list %}
                 <article class="series-card">
                     <header class="series-card-header">
                         <h3 class="series-name">{{ series_name }}</h3>
-                        <span class="series-count">{{ books|length }} book{{ "s" if books|length != 1 else "" }}</span>
+                        <span class="series-count">{{ books|length }} {{ site_record_label_plural|lower }}</span>
                     </header>
                     <ul class="series-books">
                         {% for book in books %}

@@ -1,4 +1,4 @@
-from flask import Flask, Response, jsonify, redirect, session, render_template, request, flash, url_for
+from flask import Flask, Response, jsonify, redirect, session, render_template, request, flash, url_for, has_request_context
 from flask_session import Session
 from cs50 import SQL
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -6,6 +6,7 @@ from datetime import date, datetime, timedelta
 from html import unescape
 from html.parser import HTMLParser
 import base64
+import concurrent.futures
 import io
 import importlib
 import math
@@ -37,11 +38,34 @@ except Exception:
 
 
 _SEARCH_RESULTS_CACHE = {}
+_MAL_XML_LOOKUP_CACHE = {}
 _genre_model = None
 app = Flask(__name__)
 BOOK_PAGES = {"completed", "unfinished", "tbr"}
 BOOK_PAGE_SIZE = 50
 DATE_FORMATS = ["%d %B %Y", "%d %b %Y"]
+SITE_MODES = {
+    "books": {
+        "site_name": "Book Records",
+        "nav_label": "Books",
+        "record_label": "Book",
+        "record_label_plural": "Books",
+        "tbr_label": "To Be Read",
+        "switch_label": "Switch to Show Records",
+        "icon": "icon-books.svg",
+        "body_class": "site-mode-books",
+    },
+    "shows": {
+        "site_name": "Show Records",
+        "nav_label": "Shows",
+        "record_label": "Show",
+        "record_label_plural": "Shows",
+        "tbr_label": "Plan to Watch",
+        "switch_label": "Switch to Book Records",
+        "icon": "icon-shows.svg",
+        "body_class": "site-mode-shows",
+    },
+}
 
 
 # Configure session to use filesystem (instead of signed cookies)
@@ -49,12 +73,34 @@ app.config["SESSION_PERMANENT"] = False
 app.config["SESSION_TYPE"] = "filesystem"
 Session(app)
 
-# Configure CS50 Library to use SQLite database
+# Configure CS50 Library to use SQLite databases
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "books.db")
-if not os.path.exists(DB_PATH):
-    open(DB_PATH, "a").close()
-db = SQL(f"sqlite:///{DB_PATH}")
+BOOKS_DB_PATH = os.path.join(BASE_DIR, "books.db")
+SHOWS_DB_PATH = os.path.join(BASE_DIR, "shows.db")
+for db_path in (BOOKS_DB_PATH, SHOWS_DB_PATH):
+    if not os.path.exists(db_path):
+        open(db_path, "a").close()
+
+books_db = SQL(f"sqlite:///{BOOKS_DB_PATH}")
+shows_db = SQL(f"sqlite:///{SHOWS_DB_PATH}")
+
+
+class _ModeAwareDatabase:
+    def _resolve(self, query=None):
+        if query and re.search(r"\busers\b", str(query), re.IGNORECASE):
+            return books_db
+        if not has_request_context():
+            return books_db
+        return shows_db if session.get("site_mode", "books") == "shows" else books_db
+
+    def execute(self, query, *args, **kwargs):
+        return self._resolve(query).execute(query, *args, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self._resolve(), name)
+
+
+db = _ModeAwareDatabase()
 
 
 def ensure_schema():
@@ -136,10 +182,187 @@ def ensure_schema():
         """
     )
 
+    _add_column_if_missing(db, "tbr", "episodes", "TEXT")
+    _add_column_if_missing(db, "unfinished", "episodes", "TEXT")
+    _add_column_if_missing(db, "completed", "episodes", "TEXT")
+
+
+def _add_column_if_missing(connection, table, column, decl):
+    """ALTER TABLE ADD COLUMN, ignoring SQLite's 'duplicate column' error.
+
+    cs50.SQL wraps PRAGMA results inconsistently, so we just try the ALTER
+    and swallow the duplicate-column error.
+    """
+    try:
+        connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+    except Exception as exc:
+        if "duplicate column name" not in str(exc).lower():
+            raise
+
 
 ensure_schema()
 today = date.today()
 
+
+
+def ensure_shows_schema(connection):
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+            username TEXT NOT NULL,
+            hash TEXT NOT NULL,
+            date NUMERIC NOT NULL
+        )
+        """
+    )
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS username ON users (username)")
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS tbr (
+            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+            user_id INTEGER NOT NULL,
+            book TEXT NOT NULL,
+            status TEXT NOT NULL,
+            date NUMERIC NOT NULL,
+            notes TEXT,
+            genres TEXT,
+            series TEXT,
+            favorite INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+        """
+    )
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS unfinished (
+            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+            user_id INTEGER NOT NULL,
+            book TEXT NOT NULL,
+            date NUMERIC NOT NULL,
+            notes TEXT,
+            genres TEXT,
+            status TEXT NOT NULL DEFAULT 'Finished',
+            series TEXT,
+            favorite INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+        """
+    )
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS completed (
+            id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+            user_id INTEGER NOT NULL,
+            book TEXT NOT NULL,
+            date NUMERIC NOT NULL,
+            days INTEGER NOT NULL DEFAULT 0,
+            notes TEXT,
+            reread INTEGER NOT NULL DEFAULT 0,
+            genres TEXT,
+            status TEXT NOT NULL DEFAULT 'Finished',
+            series TEXT,
+            favorite INTEGER NOT NULL DEFAULT 0,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+        """
+    )
+
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS combined (
+            id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            book TEXT NOT NULL,
+            date NUMERIC NOT NULL,
+            page TEXT NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id)
+        )
+        """
+    )
+
+    _add_column_if_missing(connection, "tbr", "episodes", "TEXT")
+    _add_column_if_missing(connection, "unfinished", "episodes", "TEXT")
+    _add_column_if_missing(connection, "completed", "episodes", "TEXT")
+
+
+ensure_shows_schema(shows_db)
+
+
+def ensure_user_mirror_in_shows(user_id):
+    """Copy the books.db user row into shows.db so its FK constraints succeed.
+
+    The `users` table is canonically in books.db, but shows.db has its own
+    users table with foreign keys from tbr/completed/unfinished. Any write in
+    shows mode otherwise fails with FOREIGN KEY constraint failed.
+    """
+    if not user_id:
+        return
+    existing = shows_db.execute("SELECT id FROM users WHERE id = ? LIMIT 1", user_id)
+    if existing:
+        return
+    user = books_db.execute("SELECT id, username, hash, date FROM users WHERE id = ? LIMIT 1", user_id)
+    if not user:
+        return
+    try:
+        shows_db.execute(
+            "INSERT INTO users (id, username, hash, date) VALUES (?, ?, ?, ?)",
+            user[0]["id"], user[0]["username"], user[0]["hash"], user[0]["date"],
+        )
+    except Exception:
+        pass
+
+
+@app.before_request
+def _mirror_user_to_shows_db():
+    user_id = session.get("user_id") if has_request_context() else None
+    if not user_id or session.get("shows_user_mirrored") == user_id:
+        return
+    ensure_user_mirror_in_shows(user_id)
+    session["shows_user_mirrored"] = user_id
+
+
+def get_site_mode():
+    if not has_request_context():
+        return "books"
+    mode = session.get("site_mode", "books")
+    return mode if mode in SITE_MODES else "books"
+
+
+def get_site_config(mode=None):
+    return SITE_MODES.get(mode or get_site_mode(), SITE_MODES["books"])
+
+
+@app.context_processor
+def inject_site_config():
+    config = get_site_config()
+    return {
+        "site_mode": get_site_mode(),
+        "site_mode_class": config["body_class"],
+        "site_name": config["site_name"],
+        "site_nav_label": config["nav_label"],
+        "site_record_label": config["record_label"],
+        "site_record_label_plural": config["record_label_plural"],
+        "site_tbr_label": config["tbr_label"],
+        "site_switch_label": config["switch_label"],
+        "site_icon_url": url_for("static", filename=config["icon"]),
+        "category_label": lambda category: config["tbr_label"] if category == "tbr" else category.replace("_", " ").title(),
+    }
+
+
+@app.route("/switch-mode", methods=["POST"])
+def switch_mode():
+    if not session_user_exists():
+        session.clear()
+        flash("Your session is no longer valid. Please log in again.")
+        return redirect("/")
+    current_mode = get_site_mode()
+    session["site_mode"] = "shows" if current_mode == "books" else "books"
+    next_page = request.form.get("next") or request.referrer or "/home"
+    return redirect(next_page)
 
 def get_page_from_referrer():
     referrer = request.headers.get("Referer", "")
@@ -1288,15 +1511,277 @@ def _clean_qidian_genre_candidate(text):
     return cleaned
 
 
+def _mal_xml_path(user_id):
+    return os.path.join(BASE_DIR, f"mal_animelist_{user_id}.xml")
+
+
+def is_mal_xml(file_bytes):
+    """Cheap content sniff for MyAnimeList XML exports."""
+    if not file_bytes:
+        return False
+    try:
+        head = file_bytes[:4096].decode("utf-8", errors="ignore").lower()
+    except Exception:
+        return False
+    return "<myanimelist>" in head
+
+
+def _parse_mal_date(text):
+    if not text or text == "0000-00-00":
+        return None
+    try:
+        return datetime.strptime(text, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def parse_mal_xml(file_bytes):
+    """Parse a MyAnimeList XML export into normalized entry dicts."""
+    try:
+        root = ET.fromstring(file_bytes)
+    except ET.ParseError:
+        return None
+    if root.tag != "myanimelist":
+        return None
+
+    def text_of(node, tag):
+        el = node.find(tag)
+        return (el.text or "").strip() if (el is not None and el.text is not None) else ""
+
+    entries = []
+    for anime in root.findall("anime"):
+        title = text_of(anime, "series_title")
+        if not title:
+            continue
+        entries.append(
+            {
+                "animedb_id": text_of(anime, "series_animedb_id"),
+                "title": title,
+                "series_type": text_of(anime, "series_type"),
+                "series_episodes": text_of(anime, "series_episodes"),
+                "watched_episodes": text_of(anime, "my_watched_episodes"),
+                "finish_date": text_of(anime, "my_finish_date"),
+                "score": text_of(anime, "my_score"),
+                "status": text_of(anime, "my_status"),
+                "comments": text_of(anime, "my_comments"),
+            }
+        )
+    return entries
+
+
+def parse_mal_user_name(file_bytes):
+    """Pull `<myinfo><user_name>` out of a MAL XML export, or "" if absent."""
+    try:
+        root = ET.fromstring(file_bytes)
+    except ET.ParseError:
+        return ""
+    if root.tag != "myanimelist":
+        return ""
+    el = root.find("./myinfo/user_name")
+    return (el.text or "").strip() if (el is not None and el.text is not None) else ""
+
+
+def save_mal_xml(file_bytes, user_id):
+    """Persist the uploaded XML so genre inference can resolve animedb_id by title."""
+    try:
+        path = _mal_xml_path(user_id)
+        with open(path, "wb") as f:
+            f.write(file_bytes)
+        _MAL_XML_LOOKUP_CACHE.pop(user_id, None)
+        return True
+    except OSError:
+        return False
+
+
+_MAL_RELATIONS_CACHE_PATH = os.path.join(BASE_DIR, "mal_relations_cache.json")
+
+
+def _fetch_anime_plus_franchises(username):
+    """Pull the user's full franchise list from anime.plus in one request.
+
+    Returns a list of franchises; each is a list of (animedb_id, title) tuples
+    in the order anime.plus presents them (root entry first).
+    """
+    if not username:
+        return []
+    url = f"https://anime.plus/{username}/entries?sender=franchises&media=A"
+    try:
+        response = requests.get(url, headers={"User-Agent": DESKTOP_UA}, timeout=20)
+        response.raise_for_status()
+    except Exception:
+        return []
+    soup = BeautifulSoup(response.text, "html.parser")
+    ol = soup.select_one("ol.franchises")
+    if not ol:
+        return []
+
+    franchises = []
+    for li in ol.select("li"):
+        members = []
+        seen = set()
+        for anchor in li.select('a[href*="/anime/"]'):
+            match = re.search(r"/anime/(\d+)", anchor.get("href", ""))
+            if not match:
+                continue
+            animedb_id = match.group(1)
+            if animedb_id in seen:
+                continue
+            seen.add(animedb_id)
+            members.append((animedb_id, anchor.get_text(strip=True)))
+        if len(members) >= 2:
+            franchises.append(members)
+    return franchises
+
+
+def _load_mal_relations_cache():
+    try:
+        with open(_MAL_RELATIONS_CACHE_PATH) as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _save_mal_relations_cache(cache):
+    try:
+        with open(_MAL_RELATIONS_CACHE_PATH, "w") as f:
+            json.dump(cache, f)
+    except OSError:
+        pass
+
+
+def _fetch_mal_related_ids(animedb_id):
+    """Return all anime IDs from a MAL page's Related Entries section.
+
+    Covers every relation type (Prequel, Sequel, Side Story, Parent Story,
+    Spin-off, Alternative Version, Adaptation, etc.) so that any connected
+    work in the user's library is grouped together. Manga adaptations are
+    excluded by scoping the scrape to anchors under `/anime/`.
+    """
+    if not animedb_id:
+        return []
+    url = f"https://myanimelist.net/anime/{animedb_id}"
+    try:
+        response = requests.get(url, headers={"User-Agent": DESKTOP_UA}, timeout=12)
+        response.raise_for_status()
+    except Exception:
+        return []
+    soup = BeautifulSoup(response.text, "html.parser")
+    related = set()
+
+    for table in soup.select("table.anime_detail_related_anime"):
+        for anchor in table.select("a[href*='/anime/']"):
+            match = re.search(r"/anime/(\d+)", anchor.get("href", ""))
+            if match and match.group(1) != animedb_id:
+                related.add(match.group(1))
+
+    for container in soup.select(
+        ".related-entries, .entries-tile, .entries-table, .anime-detail-header-stats-entries"
+    ):
+        for anchor in container.select("a[href*='/anime/']"):
+            match = re.search(r"/anime/(\d+)", anchor.get("href", ""))
+            if match and match.group(1) != animedb_id:
+                related.add(match.group(1))
+
+    return sorted(related)
+
+
+def _build_mal_series_groups(animedb_ids, fetch_fn=_fetch_mal_related_ids, max_workers=6, progress_log=None):
+    """Group animedb_ids into connected components via prequel/sequel links.
+
+    Returns {animedb_id: representative_id}. Only edges where the related ID
+    also appears in `animedb_ids` are kept, so the graph is closed to the
+    user's import set.
+    """
+    ids = [aid for aid in animedb_ids if aid]
+    if not ids:
+        return {}
+    id_set = set(ids)
+
+    cache = _load_mal_relations_cache()
+    to_fetch = [aid for aid in ids if aid not in cache]
+    if to_fetch:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as pool:
+            future_to_id = {pool.submit(fetch_fn, aid): aid for aid in to_fetch}
+            done_count = 0
+            for future in concurrent.futures.as_completed(future_to_id):
+                aid = future_to_id[future]
+                try:
+                    cache[aid] = future.result()
+                except Exception:
+                    cache[aid] = []
+                done_count += 1
+                if progress_log and done_count % 50 == 0:
+                    progress_log(done_count, len(to_fetch))
+        _save_mal_relations_cache(cache)
+
+    parent = {aid: aid for aid in ids}
+
+    def find(node):
+        while parent[node] != node:
+            parent[node] = parent[parent[node]]
+            node = parent[node]
+        return node
+
+    def union(a, b):
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+
+    for aid in ids:
+        for related_id in cache.get(aid, []):
+            if related_id in id_set:
+                union(aid, related_id)
+
+    return {aid: find(aid) for aid in ids}
+
+
+def load_mal_xml_lookup(user_id):
+    """Return a {normalized_title: animedb_id} map from the saved XML, if any."""
+    path = _mal_xml_path(user_id)
+    if not os.path.exists(path):
+        return {}
+    try:
+        mtime = os.path.getmtime(path)
+    except OSError:
+        return {}
+    cached = _MAL_XML_LOOKUP_CACHE.get(user_id)
+    if cached and cached[0] == mtime:
+        return cached[1]
+    try:
+        with open(path, "rb") as f:
+            entries = parse_mal_xml(f.read()) or []
+    except OSError:
+        return {}
+    lookup = {}
+    for entry in entries:
+        title = entry.get("title", "")
+        animedb_id = entry.get("animedb_id", "")
+        if title and animedb_id:
+            lookup[normalize_book_key(title)] = animedb_id
+    _MAL_XML_LOOKUP_CACHE[user_id] = (mtime, lookup)
+    return lookup
+
+
 def _find_mal_url(title):
     """Use MyAnimeList's prefix-search JSON API to find the top match URL.
 
     Endpoint: /search/prefix.json?type=manga&keyword=<q>&v=1
     Returns `https://myanimelist.net/manga/<id>/<slug>` for the first item, or
     falls back to the anime search if manga has no hits.
+
+    When the user has uploaded their MAL XML export, we short-circuit the
+    network search and construct the URL directly from the stored
+    `series_animedb_id`.
     """
     if not title:
         return None
+    if has_request_context():
+        user_id = session.get("user_id")
+        if user_id:
+            animedb_id = load_mal_xml_lookup(user_id).get(normalize_book_key(title))
+            if animedb_id:
+                return f"https://myanimelist.net/anime/{animedb_id}"
     base = "https://myanimelist.net/search/prefix.json"
     for kind in ("manga", "anime"):
         try:
@@ -2320,6 +2805,290 @@ def import_unfinished_books(lines, user_id):
 
     return inserted, updated, skipped, skipped_entries, undo_actions
 
+
+MAL_STATUS_UNFINISHED = {"Watching": "Watching", "On-Hold": "On Hold", "Dropped": "Dropped"}
+
+
+def _build_mal_notes(entry):
+    """Build the notes string for an imported MAL entry. Episode counts live
+    in the dedicated `episodes` column, not in notes.
+    """
+    parts = []
+    score = entry.get("score") or "0"
+    if score and score != "0":
+        parts.append(f"MAL Score: {score}/10")
+    comments = entry.get("comments")
+    if comments:
+        parts.append(comments)
+    animedb_id = entry.get("animedb_id")
+    if animedb_id:
+        parts.append(f"MAL: https://myanimelist.net/anime/{animedb_id}")
+    return parts
+
+
+def _build_mal_episodes(entry):
+    """Return a display string for the episodes column, or '' if unknown."""
+    watched = (entry.get("watched_episodes") or "0").strip()
+    total = (entry.get("series_episodes") or "0").strip()
+    has_watched = watched and watched != "0"
+    has_total = total and total != "0"
+    if has_total:
+        return f"{watched}/{total}"
+    if has_watched:
+        return watched
+    return ""
+
+
+def import_mal_xml_entries(entries, user_id, detect_series=True, mal_username=None):
+    """Route MAL XML entries to completed/tbr/unfinished based on my_status.
+
+    When `detect_series` is true, series labels are filled in from anime.plus's
+    franchise list (one HTTP request to `https://anime.plus/<mal_username>/
+    entries?sender=franchises&media=A`). For shows that anime.plus does not
+    cover, the per-show MAL "Related Entries" scrape is used as a fallback.
+    """
+    inserted = 0
+    updated = 0
+    skipped = 0
+    skipped_entries = []
+    undo_actions = []
+    today_date = date.today()
+    row_index = {}  # animedb_id -> (table, row_id, title)
+
+    for entry in entries:
+        title = entry.get("title", "").strip()
+        status = entry.get("status", "").strip()
+        if not title or not status:
+            skipped += 1
+            skipped_entries.append(f"{title or '(no title)'} — missing status")
+            continue
+
+        note_parts = _build_mal_notes(entry)
+        notes_text = merge_notes(note_parts)
+        episodes_text = _build_mal_episodes(entry)
+        favorite = 0
+        try:
+            if int(entry.get("score") or 0) >= 9:
+                favorite = 1
+        except ValueError:
+            favorite = 0
+
+        if status == "Completed":
+            finish_date = _parse_mal_date(entry.get("finish_date")) or today_date
+            existing = find_existing_book_row(
+                "completed", user_id, title, "id, reread, notes, book, favorite, status"
+            )
+            if existing:
+                merged_notes = merge_notes([existing["notes"], notes_text])
+                new_favorite = 1 if (existing["favorite"] or favorite) else 0
+                undo_actions.append(
+                    {
+                        "action": "update_completed",
+                        "table": "completed",
+                        "id": existing["id"],
+                        "previous": {
+                            "reread": existing["reread"],
+                            "notes": existing["notes"],
+                            "favorite": existing["favorite"],
+                            "status": existing["status"],
+                        },
+                    }
+                )
+                db.execute(
+                    "UPDATE completed SET notes = ?, favorite = ?, episodes = COALESCE(NULLIF(?, ''), episodes) WHERE id = ? AND user_id = ?",
+                    merged_notes,
+                    new_favorite,
+                    episodes_text,
+                    existing["id"],
+                    user_id,
+                )
+                if entry.get("animedb_id"):
+                    row_index[entry["animedb_id"]] = ("completed", existing["id"], title)
+                updated += 1
+                continue
+
+            latest = db.execute(
+                "SELECT date FROM completed WHERE user_id = ? ORDER BY date DESC LIMIT 1",
+                user_id,
+            )
+            days = 0
+            if latest:
+                try:
+                    prev = datetime.strptime(str(latest[0]["date"]), "%Y-%m-%d").date()
+                    days = max((finish_date - prev).days, 0)
+                except ValueError:
+                    days = 0
+
+            row_id = db.execute(
+                "INSERT INTO completed (user_id, book, date, days, notes, reread, status, series, favorite, episodes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                user_id,
+                title,
+                finish_date,
+                days,
+                notes_text,
+                0,
+                "Finished",
+                None,
+                favorite,
+                episodes_text or None,
+            )
+            insert_combined_row(row_id, user_id, title, finish_date, "completed")
+            undo_actions.append({"action": "insert", "table": "completed", "id": row_id})
+            if entry.get("animedb_id"):
+                row_index[entry["animedb_id"]] = ("completed", row_id, title)
+            inserted += 1
+
+        elif status == "Plan to Watch":
+            existing = find_existing_book_row("tbr", user_id, title, "id, favorite, book")
+            if existing:
+                if favorite and not existing["favorite"]:
+                    db.execute(
+                        "UPDATE tbr SET favorite = 1 WHERE id = ? AND user_id = ?",
+                        existing["id"],
+                        user_id,
+                    )
+                    updated += 1
+                else:
+                    skipped += 1
+                if entry.get("animedb_id"):
+                    row_index[entry["animedb_id"]] = ("tbr", existing["id"], title)
+                continue
+            row_id = db.execute(
+                "INSERT INTO tbr (user_id, book, status, date, notes, series, favorite, episodes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                user_id,
+                title,
+                "Uncompleted",
+                today_date,
+                notes_text,
+                None,
+                favorite,
+                episodes_text or None,
+            )
+            insert_combined_row(row_id, user_id, title, today_date, "tbr")
+            undo_actions.append({"action": "insert", "table": "tbr", "id": row_id})
+            if entry.get("animedb_id"):
+                row_index[entry["animedb_id"]] = ("tbr", row_id, title)
+            inserted += 1
+
+        elif status in MAL_STATUS_UNFINISHED:
+            row_status = MAL_STATUS_UNFINISHED[status]
+            existing = find_existing_book_row(
+                "unfinished", user_id, title, "id, notes, status, series, date, book, favorite"
+            )
+            if existing:
+                merged_notes = merge_notes([existing["notes"], notes_text])
+                new_favorite = 1 if (existing["favorite"] or favorite) else 0
+                undo_actions.append(
+                    {
+                        "action": "update_unfinished",
+                        "table": "unfinished",
+                        "id": existing["id"],
+                        "previous": {
+                            "status": existing["status"],
+                            "notes": existing["notes"],
+                            "series": existing["series"],
+                            "date": existing["date"],
+                            "favorite": existing["favorite"],
+                            "combined_date": existing["date"],
+                            "combined_book": existing["book"],
+                        },
+                    }
+                )
+                db.execute(
+                    "UPDATE unfinished SET status = ?, notes = ?, series = ?, date = ?, favorite = ?, episodes = COALESCE(NULLIF(?, ''), episodes) WHERE id = ? AND user_id = ?",
+                    row_status,
+                    merged_notes,
+                    existing["series"],
+                    today_date,
+                    new_favorite,
+                    episodes_text,
+                    existing["id"],
+                    user_id,
+                )
+                db.execute(
+                    "UPDATE combined SET date = ?, book = ? WHERE user_id = ? AND page = 'unfinished' AND id = ?",
+                    today_date,
+                    title,
+                    user_id,
+                    existing["id"],
+                )
+                if entry.get("animedb_id"):
+                    row_index[entry["animedb_id"]] = ("unfinished", existing["id"], title)
+                updated += 1
+                continue
+
+            row_id = db.execute(
+                "INSERT INTO unfinished (user_id, book, date, notes, status, series, favorite, episodes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                user_id,
+                title,
+                today_date,
+                notes_text,
+                row_status,
+                None,
+                favorite,
+                episodes_text or None,
+            )
+            insert_combined_row(row_id, user_id, title, today_date, "unfinished")
+            undo_actions.append({"action": "insert", "table": "unfinished", "id": row_id})
+            if entry.get("animedb_id"):
+                row_index[entry["animedb_id"]] = ("unfinished", row_id, title)
+            inserted += 1
+
+        else:
+            skipped += 1
+            skipped_entries.append(f"{title} (unrecognized status: {status})")
+
+    if detect_series and row_index:
+        _apply_mal_series_groups(row_index, user_id, mal_username=mal_username)
+
+    return inserted, updated, skipped, skipped_entries, undo_actions
+
+
+def _apply_mal_series_groups(row_index, user_id, mal_username=None):
+    """Group imported rows into franchises and write a shared `series` label.
+
+    Primary source is anime.plus's franchise list — one HTTP request returns
+    every franchise the user tracks on MAL. Whatever anime.plus does not cover
+    falls back to scraping each show's MAL Related Entries section.
+    """
+    covered = set()
+    franchise_components = []  # list of (root_title, [animedb_id, ...])
+
+    if mal_username:
+        franchises = _fetch_anime_plus_franchises(mal_username)
+        for franchise in franchises:
+            members_in_set = [(aid, title) for aid, title in franchise if aid in row_index]
+            if len(members_in_set) < 2:
+                continue
+            root_title = members_in_set[0][1] or row_index[members_in_set[0][0]][2]
+            franchise_components.append((root_title, [aid for aid, _ in members_in_set]))
+            covered.update(aid for aid, _ in members_in_set)
+
+    remaining = [aid for aid in row_index if aid not in covered]
+    if remaining:
+        mal_groups = _build_mal_series_groups(remaining)
+        mal_components = {}
+        for aid, root in mal_groups.items():
+            mal_components.setdefault(root, []).append(aid)
+        for root, members in mal_components.items():
+            if len(members) < 2:
+                continue
+            franchise_components.append((row_index[root][2], members))
+
+    for root_title, members in franchise_components:
+        if len(members) < 2:
+            continue
+        series_label = root_title
+        for aid in members:
+            table, row_id, _ = row_index[aid]
+            db.execute(
+                f"UPDATE {table} SET series = ? WHERE id = ? AND user_id = ?",
+                series_label,
+                row_id,
+                user_id,
+            )
+
+
 def switch(original, new, book_id):
     original = original.lower()
     new = new.lower()
@@ -2430,12 +3199,16 @@ def home():
 @app.route("/add", methods=["GET", "POST"])
 def add():
     if request.method == "POST":
+        site_config = get_site_config()
         name = request.form.get("book")
         category = request.form.get("category")
         status = request.form.get("status")
         genres = request.form.get("genres")
         notes = request.form.get("notes")
         series = request.form.get("series")
+        if get_site_mode() == "shows" and status == "Left Extras":
+            flash("Left Extras is not available in Show Records.")
+            return redirect("/add")
         latest = db.execute("SELECT * FROM completed WHERE user_id = ? ORDER BY date DESC LIMIT 1", session["user_id"])
         if name != "" and category in BOOK_PAGES and status != "":
             book_id = db.execute(
@@ -2448,7 +3221,7 @@ def add():
                 status,
                 series,
             )
-            flash('Add Book Success!')
+            flash(f'Add {site_config["record_label"]} Success!')
             db.execute("INSERT INTO combined (id, user_id, book, date, page) VALUES (?,?,?,?,?)", book_id, session["user_id"], name, today, category)
             if category == "completed":
                 if latest == []:
@@ -2460,7 +3233,7 @@ def add():
                 db.execute("UPDATE completed SET days = ? WHERE id = ?", days, book_id)
             return redirect("/add")
         else:
-            flash('Add Book Failed! Some fields were not filled in.')
+            flash(f'Add {site_config["record_label"]} Failed! Some fields were not filled in.')
             return redirect("/add")
 
     else:
@@ -2481,13 +3254,40 @@ def import_books():
     category = request.form.get("category")
     upload = request.files.get("books_file")
 
-    if category not in BOOK_PAGES:
-        flash("Select a valid category.")
-        return redirect("/import")
     if upload is None or upload.filename == "":
         flash("Select a file to import.")
         return redirect("/import")
 
+    file_bytes = upload.read()
+    if is_mal_xml(file_bytes):
+        if get_site_mode() != "shows":
+            flash("MAL XML import is only available in Show Records mode.")
+            return redirect("/import")
+        entries = parse_mal_xml(file_bytes)
+        if not entries:
+            flash("Could not parse MAL XML file.")
+            return redirect("/import")
+        save_mal_xml(file_bytes, session["user_id"])
+        detect_series = bool(request.form.get("detect_series"))
+        mal_username = parse_mal_user_name(file_bytes)
+        inserted, updated, skipped, skipped_entries, undo_actions = import_mal_xml_entries(
+            entries,
+            session["user_id"],
+            detect_series=detect_series,
+            mal_username=mal_username,
+        )
+        session["last_import_undo"] = undo_actions
+        session["import_skipped_entries"] = skipped_entries
+        flash(
+            f"MAL import complete: inserted {inserted}, updated {updated}, skipped {skipped}."
+        )
+        return redirect("/import")
+
+    if category not in BOOK_PAGES:
+        flash("Select a valid category.")
+        return redirect("/import")
+
+    upload.stream.seek(0)
     content = extract_import_text(upload)
     if content is None:
         flash("Could not read file. Please upload a readable file containing book text.")
@@ -2541,7 +3341,7 @@ def clear_database():
 
     session.pop("last_import_undo", None)
     session.pop("import_skipped_entries", None)
-    flash("Book data cleared.")
+    flash("Data cleared.")
     return redirect("/import")
 
 @app.route("/choose", methods = ["GET", "POST"])
@@ -2777,6 +3577,7 @@ def serialize_book_row(category, book):
         "genres": book.get("genres") or "",
         "notes": book.get("notes") or "",
         "series": book.get("series") or "",
+        "episodes": book.get("episodes") or "",
     }
     if "reread" in book:
         payload["reread"] = book["reread"]
@@ -2834,6 +3635,7 @@ def update_book(category, book_id):
     genres = (request.form.get("genres") or "").strip()
     series = (request.form.get("series") or "").strip()
     notes = (request.form.get("notes") or "").strip()
+    episodes = (request.form.get("episodes") or "").strip()
     reread_raw = (request.form.get("reread") or "").strip()
     reread = None
     if category == "completed" and reread_raw != "":
@@ -2868,16 +3670,16 @@ def update_book(category, book_id):
 
     if category == "completed" and reread is not None:
         db.execute(
-            f"UPDATE {category} SET book = ?, status = ?, genres = ?, series = ?, notes = ?, reread = ? "
+            f"UPDATE {category} SET book = ?, status = ?, genres = ?, series = ?, notes = ?, reread = ?, episodes = ? "
             "WHERE id = ? AND user_id = ?",
-            book_name, status, genres, series, notes, reread,
+            book_name, status, genres, series, notes, reread, episodes or None,
             book_id, session["user_id"],
         )
     else:
         db.execute(
-            f"UPDATE {category} SET book = ?, status = ?, genres = ?, series = ?, notes = ? "
+            f"UPDATE {category} SET book = ?, status = ?, genres = ?, series = ?, notes = ?, episodes = ? "
             "WHERE id = ? AND user_id = ?",
-            book_name, status, genres, series, notes,
+            book_name, status, genres, series, notes, episodes or None,
             book_id, session["user_id"],
         )
     db.execute(
@@ -4054,6 +4856,58 @@ def render_analytics_pdf(html):
             raise RuntimeError(details)
 
         return pdf_path.read_bytes()
+
+
+@app.route("/api/bulk_suggest_genres/<category>", methods=["POST"])
+def api_bulk_suggest_genres(category):
+    if not session_user_exists():
+        return {"error": "auth"}, 401
+    if category not in BOOK_PAGES:
+        return {"error": "invalid category"}, 400
+
+    data = request.get_json(silent=True) or {}
+    try:
+        batch_size = int(data.get("batch_size", 10))
+    except (TypeError, ValueError):
+        batch_size = 10
+    batch_size = max(1, min(batch_size, 50))
+
+    rows = db.execute(
+        f"SELECT id, book FROM {category} "
+        "WHERE user_id = ? AND (genres IS NULL OR genres = '' OR genres = 'None') "
+        "ORDER BY date DESC, id DESC LIMIT ?",
+        session["user_id"],
+        batch_size,
+    )
+
+    updated_books = []
+    skipped = 0
+    for row in rows:
+        title = (row["book"] or "").strip()
+        if not title:
+            skipped += 1
+            continue
+        try:
+            suggestions = infer_genres(title, "")
+        except Exception:
+            suggestions = []
+        genres = [g for g, _score, _src in suggestions if g]
+        if not genres:
+            skipped += 1
+            continue
+        joined = ", ".join(genres)
+        db.execute(
+            f"UPDATE {category} SET genres = ? WHERE id = ? AND user_id = ?",
+            joined, row["id"], session["user_id"],
+        )
+        updated_books.append({"id": row["id"], "title": title, "genres": joined})
+
+    return {
+        "updated": len(updated_books),
+        "skipped": skipped,
+        "books": updated_books,
+        "remaining": count_books_missing_genres_with_filters(category, session["user_id"]),
+    }
 
 
 @app.route("/api/update_genres/<category>/<int:book_id>", methods=["POST"])

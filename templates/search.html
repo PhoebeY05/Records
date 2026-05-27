@@ -14,7 +14,7 @@
 
 <div class="container pb-5">
     {% if results|length == 0 %}
-        <p class="grey-text text-center my-5">No matching books found.</p>
+        <p class="grey-text text-center my-5">No matching {{ site_record_label_plural|lower }} found.</p>
     {% else %}
         <div class="search-grid">
             {% for book in results %}
@@ -23,7 +23,7 @@
                 {% elif book.category == "unfinished" %}
                     {% set category_label = "Unfinished" %}
                 {% elif book.category == "tbr" %}
-                    {% set category_label = "To Be Read" %}
+                    {% set category_label = site_tbr_label %}
                 {% else %}
                     {% set category_label = book.category %}
                 {% endif %}

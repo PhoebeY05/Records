@@ -6,7 +6,7 @@
       <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
       <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
       <link href="../static/styles.css" rel="stylesheet">
-      <link rel="icon" type="image/png" href="{{ url_for('static', filename='icon.png') }}">
+    <link rel="icon" type="image/svg+xml" href="{{ site_icon_url }}">
       <title>{% block title %}{% endblock %}</title>
     <script>
         document.addEventListener("DOMContentLoaded", function () {
@@ -39,9 +39,9 @@
   </head>
   <nav class="navbar navbar-expand-lg navbar-dark bg main-nav sticky-top">
       <div class="container-fluid">
-        <a class="navbar-brand main-nav-brand georgia" href="/home" aria-label="Go to home">
-          <img src="../static/icon.png" height="34" width="34" alt="">
-          <span class="main-nav-brand-text">Reading Records</span>
+                <a class="navbar-brand main-nav-brand georgia" href="/home" aria-label="Go to home">
+                    <img src="{{ site_icon_url }}" height="34" width="34" alt="">
+                    <span class="main-nav-brand-text">{{ site_name }}</span>
         </a>
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
           <span class="navbar-toggler-icon"></span>
@@ -51,11 +51,11 @@
             {% set books_active = request.path in ['/tbr', '/completed', '/unfinished', '/favorites'] %}
             {% set insights_active = request.path in ['/series', '/genres', '/trends', '/analytics'] or request.path.startswith('/analytics/') %}
             <li class="nav-item dropdown">
-              <a class="nav-link dropdown-toggle georgia {% if books_active %}active{% endif %}" href="#" id="booksDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                Books
+                            <a class="nav-link dropdown-toggle georgia {% if books_active %}active{% endif %}" href="#" id="booksDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                {{ site_nav_label }}
               </a>
               <ul class="dropdown-menu" aria-labelledby="booksDropdown">
-                <li><a class="dropdown-item georgia {% if request.path == '/tbr' %}active{% endif %}" href="/tbr">To Be Read</a></li>
+                                <li><a class="dropdown-item georgia {% if request.path == '/tbr' %}active{% endif %}" href="/tbr">{{ site_tbr_label }}</a></li>
                 <li><a class="dropdown-item georgia {% if request.path == '/completed' %}active{% endif %}" href="/completed">Completed</a></li>
                 <li><a class="dropdown-item georgia {% if request.path == '/unfinished' %}active{% endif %}" href="/unfinished">Unfinished</a></li>
                 <li><a class="dropdown-item georgia {% if request.path == '/favorites' %}active{% endif %}" href="/favorites">Favorites</a></li>
@@ -73,13 +73,22 @@
             </li>
           </ul>
           <div class="main-nav-actions d-flex align-items-center gap-2 mb-2 mb-lg-0">
-            <button type="button" class="btn btn-outline-light main-nav-icon-btn" data-bs-toggle="modal" data-bs-target="#searchModal" aria-label="Search books">
+                        <form action="/switch-mode" method="post" class="m-0">
+                            <input type="hidden" name="next" value="{{ request.full_path if request.query_string else request.path }}">
+                            <button type="submit" class="btn btn-outline-light main-nav-icon-btn main-nav-switch-btn" aria-label="{{ site_switch_label }}" title="{{ site_switch_label }}">
+                                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                    <path d="M7 7h10l-2.5-2.5L16 3l4 4-4 4-1.5-1.5L17 7H7a5 5 0 0 0 0 10h4v2H7a7 7 0 0 1 0-14Zm10 10H7l2.5 2.5L8 21l-4-4 4-4 1.5 1.5L7 17h10a5 5 0 0 0 0-10h-4V5h4a7 7 0 0 1 0 14Z"></path>
+                                </svg>
+                                <span class="visually-hidden">{{ site_switch_label }}</span>
+                            </button>
+                        </form>
+            <button type="button" class="btn btn-outline-light main-nav-icon-btn" data-bs-toggle="modal" data-bs-target="#searchModal" aria-label="Search {{ site_nav_label|lower }}">
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path d="M10.5 4a6.5 6.5 0 1 0 4.09 11.55l4.43 4.43 1.41-1.41-4.43-4.43A6.5 6.5 0 0 0 10.5 4Zm0 2a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9Z"></path>
               </svg>
-              <span class="visually-hidden">Search</span>
+                            <span class="visually-hidden">Search {{ site_nav_label|lower }}</span>
             </button>
-            <a class="btn btn-outline-light main-nav-icon-btn main-nav-add-btn {% if request.path == '/add' %}active{% endif %}" href="/add" aria-label="Add a book">
+            <a class="btn btn-outline-light main-nav-icon-btn main-nav-add-btn {% if request.path == '/add' %}active{% endif %}" href="/add" aria-label="Add a {{ site_record_label|lower }}">
               <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                 <path d="M12 5v14M5 12h14"></path>
               </svg>
@@ -92,20 +101,20 @@
         </div>
       </div>
     </nav>
-  <body class="platinum">
+    <body class="platinum {{ site_mode_class }}">
       {% block main %}{% endblock %}
 
       <div class="modal fade search-modal" id="searchModal" tabindex="-1" aria-labelledby="searchModalLabel" aria-hidden="true">
           <div class="modal-dialog modal-dialog-centered">
               <div class="modal-content search-modal-content">
                   <div class="modal-header">
-                      <h2 class="modal-title georgia" id="searchModalLabel">Search books</h2>
+                      <h2 class="modal-title georgia" id="searchModalLabel">Search {{ site_nav_label|lower }}</h2>
                       <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                   </div>
                   <form action="/search" method="post" role="search">
                       <div class="modal-body">
-                          <label class="visually-hidden" for="searchBooksInput">Search books</label>
-                          <input id="searchBooksInput" class="form-control georgia search-modal-input" type="search" placeholder="Search books..." name="search" aria-label="Search books" autocomplete="off">
+                          <label class="visually-hidden" for="searchBooksInput">Search {{ site_nav_label|lower }}</label>
+                          <input id="searchBooksInput" class="form-control georgia search-modal-input" type="search" placeholder="Search {{ site_nav_label|lower }}..." name="search" aria-label="Search {{ site_nav_label|lower }}" autocomplete="off">
                       </div>
                       <div class="modal-footer">
                           <button type="button" class="btn btn-outline-secondary georgia" data-bs-dismiss="modal">Cancel</button>
@@ -126,7 +135,7 @@
                   <div class="modal-body">
                       <h2 class="book-detail-title js-view"></h2>
                       <label class="book-detail-edit-field js-edit" hidden>
-                          <span>Book name</span>
+                          <span>{{ site_record_label }} name</span>
                           <input type="text" name="book" required>
                       </label>
 
@@ -135,6 +144,9 @@
                           <div class="book-detail-pair"><dt>Date added</dt><dd class="book-detail-date"></dd></div>
                           <div class="book-detail-pair"><dt>Genres</dt><dd class="book-detail-genres"></dd></div>
                           <div class="book-detail-pair"><dt>Series</dt><dd class="book-detail-series"></dd></div>
+                          {% if site_mode == "shows" %}
+                          <div class="book-detail-pair"><dt>Episodes</dt><dd class="book-detail-episodes"></dd></div>
+                          {% endif %}
                           <div class="book-detail-pair book-detail-reread-pair" hidden><dt>Rereads</dt><dd class="book-detail-reread"></dd></div>
                           <div class="book-detail-pair book-detail-days-pair" hidden><dt>Days to finish</dt><dd class="book-detail-days"></dd></div>
                       </dl>
@@ -149,6 +161,9 @@
                               </div>
                           </label>
                           <label class="book-detail-edit-field"><span>Series</span><input type="text" name="series"></label>
+                          {% if site_mode == "shows" %}
+                          <label class="book-detail-edit-field"><span>Episodes</span><input type="text" name="episodes" placeholder="e.g. 12/24"></label>
+                          {% endif %}
                           <label class="book-detail-edit-field book-detail-reread-edit-field js-reread-edit" hidden>
                               <span>Rereads</span>
                               <input type="number" name="reread" min="0" step="1" inputmode="numeric" required>
@@ -180,7 +195,7 @@
               const modalEl = document.getElementById("bookDetailModal");
               if (!modalEl) return;
               const form = modalEl.querySelector(".book-detail-form");
-              const CATEGORY_LABELS = { completed: "Completed", unfinished: "Unfinished", tbr: "To Be Read" };
+              const CATEGORY_LABELS = { completed: "Completed", unfinished: "Unfinished", tbr: {{ site_tbr_label|tojson }} };
               let currentData = null;
               let saveStatusTimer = null;
 
@@ -209,6 +224,35 @@
                   }, 1800);
               }
 
+              function escapeHtml(value) {
+                  return String(value).replace(/[&<>'"]/g, function (character) {
+                      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[character];
+                  });
+              }
+
+              function linkifyText(value) {
+                  if (value === undefined || value === null || value === "" || value === "None") {
+                      return "—";
+                  }
+
+                  const source = String(value);
+                  const urlPattern = /(https?:\/\/[^\s<]+|www\.[^\s<]+)/gi;
+                  let html = "";
+                  let lastIndex = 0;
+                  let match;
+
+                  while ((match = urlPattern.exec(source)) !== null) {
+                      html += escapeHtml(source.slice(lastIndex, match.index)).replace(/\n/g, "<br>");
+                      const url = match[0];
+                      const href = url.startsWith("www.") ? "https://" + url : url;
+                      html += '<a href="' + encodeURI(href) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(url) + '</a>';
+                      lastIndex = match.index + url.length;
+                  }
+
+                  html += escapeHtml(source.slice(lastIndex)).replace(/\n/g, "<br>");
+                  return html || "—";
+              }
+
               function populate(data) {
                   currentData = data;
                   form.action = "/update/" + data.category + "/" + data.id;
@@ -222,7 +266,11 @@
                   modalEl.querySelector(".book-detail-date").textContent = data.date || "—";
                   modalEl.querySelector(".book-detail-genres").textContent = data.genres || "—";
                   modalEl.querySelector(".book-detail-series").textContent = data.series || "—";
-                  modalEl.querySelector(".book-detail-notes-text").textContent = data.notes || "—";
+                  const episodesEl = modalEl.querySelector(".book-detail-episodes");
+                  if (episodesEl) {
+                      episodesEl.textContent = data.episodes || "—";
+                  }
+                  modalEl.querySelector(".book-detail-notes-text").innerHTML = linkifyText(data.notes);
 
                   const rereadPair = modalEl.querySelector(".book-detail-reread-pair");
                   if (data.reread !== undefined) {
@@ -240,6 +288,10 @@
                   form.querySelector('[name="status"]').value = data.status || "";
                   form.querySelector('[name="genres"]').value = data.genres || "";
                   form.querySelector('[name="series"]').value = data.series || "";
+                  const episodesInput = form.querySelector('[name="episodes"]');
+                  if (episodesInput) {
+                      episodesInput.value = data.episodes || "";
+                  }
                   form.querySelector('[name="notes"]').value = data.notes || "";
                   const rereadEditField = modalEl.querySelector(".js-reread-edit");
                   const rereadInput = form.querySelector('[name="reread"]');
@@ -259,7 +311,7 @@
               document.addEventListener("click", function (e) {
                   const link = e.target.closest("[data-book-link]");
                   if (!link) return;
-                  if (e.target.closest("button, a, input, select, textarea, label, form")) return;
+                  if (e.target.closest("button, input, select, textarea, label, form")) return;
                   e.preventDefault();
                   const category = link.dataset.category;
                   const bookId = link.dataset.bookId;

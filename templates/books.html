@@ -41,7 +41,7 @@
               {% if random.notes and random.notes != "None" %}
                 <div class="random-modal-notes">
                   <p class="random-modal-notes-label">Your notes</p>
-                  <p class="random-modal-notes-text">{{random.notes}}</p>
+                                    <p class="random-modal-notes-text">{{ random.notes | e }}</p>
                 </div>
               {% endif %}
             </div>
@@ -69,7 +69,7 @@
         <div class="book-controls mb-3">
             <div class="d-flex flex-column flex-md-row gap-3 align-items-start">
                 <div class="flex-grow-1">
-                    <label class="visually-hidden" for="bookPageSearch">Search books on this page</label>
+                    <label class="visually-hidden" for="bookPageSearch">Search {{ site_record_label_plural|lower }} on this page</label>
                     <div class="d-flex gap-2 align-items-center">
                         <input id="bookPageSearch" type="search" class="form-control book-page-search-input" placeholder="Search titles, notes, genres, or series..." autocomplete="off">
                     </div>
@@ -193,7 +193,7 @@
                                     </div>
                                     <form action="/update/{{ page.lstrip('/') }}/{{ book.id }}" method="post" class="book-info-edit js-edit" hidden>
                                         <label class="book-edit-field">
-                                            <span class="book-edit-label">Book name</span>
+                                            <span class="book-edit-label">{{ site_record_label }} name</span>
                                             <input type="text" name="book" value="{{ book.book }}" required>
                                         </label>
                                         <label class="book-edit-field">
@@ -277,9 +277,38 @@
             const bookScrollSentinel = document.getElementById("bookScrollSentinel");
             let bookLoadObserver = null;
             let bulkSuggestRemaining = 0;
+            const bulkSuggestBatchSize = 10;
 
             function getBookRows() {
                 return Array.from(document.querySelectorAll("tr.book-row"));
+            }
+
+            function linkifyNotes(value) {
+                if (value === undefined || value === null || value === "" || value === "None") {
+                    return "—";
+                }
+
+                const source = String(value);
+                const urlPattern = /(https?:\/\/[^\s<]+|www\.[^\s<]+)/gi;
+                const parts = [];
+                let lastIndex = 0;
+                let match;
+
+                while ((match = urlPattern.exec(source)) !== null) {
+                    const text = source.slice(lastIndex, match.index).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/'/g, "&#39;").replace(/\"/g, "&quot;").replace(/\n/g, "<br>");
+                    parts.push(text);
+                    const href = match[0].startsWith("www.") ? "https://" + match[0] : match[0];
+                    parts.push('<a href="' + encodeURI(href) + '" target="_blank" rel="noopener noreferrer">' + match[0].replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/'/g, "&#39;").replace(/\"/g, "&quot;") + '</a>');
+                    lastIndex = match.index + match[0].length;
+                }
+
+                parts.push(source.slice(lastIndex).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/'/g, "&#39;").replace(/\"/g, "&quot;").replace(/\n/g, "<br>"));
+                return parts.join("") || "—";
+            }
+
+            const randomNotes = document.querySelector(".random-modal-notes-text");
+            if (randomNotes) {
+                randomNotes.innerHTML = linkifyNotes(randomNotes.textContent || randomNotes.innerText || "");
             }
 
             function refreshBulkSuggestCount() {
@@ -580,7 +609,7 @@
 
                 const notesText = card.querySelector(".book-info-notes-text");
                 if (notesText) {
-                    notesText.textContent = data.notes || "—";
+                    notesText.innerHTML = linkifyNotes(data.notes);
                 }
 
                 const editForm = card.querySelector("form.book-info-edit");
@@ -625,82 +654,109 @@
 
                 const page = {{ page | tojson }};
                 const category = page.replace(/^\//, "");
-                let cancelled = false;
+                let cancelRequested = false;
                 let running = false;
+                let controller = null;
+                let totalUpdated = 0;
+                let totalSkipped = 0;
+                let totalToProcess = 0;
 
                 function refreshCount() {
                     countEl.textContent = String(Math.max(0, bulkSuggestRemaining));
                 }
                 refreshCount();
 
+                function setIdleState() {
+                    bulkBtn.disabled = false;
+                    bulkBtn.textContent = "Suggest genres for all empty rows";
+                    running = false;
+                    controller = null;
+                }
+
+                function setRunningState() {
+                    bulkBtn.disabled = false;
+                    bulkBtn.textContent = "Cancel";
+                    running = true;
+                }
+
                 bulkBtn.addEventListener("click", async function () {
                     if (running) {
-                        cancelled = true;
-                        bulkBtn.textContent = "Cancelling…";
+                        cancelRequested = true;
+                        statusEl.textContent = "Cancelling after the current request…";
+                        if (controller) controller.abort();
                         return;
                     }
-                    const rows = Array.from(document.querySelectorAll('tr.book-row[data-needs-genres="1"]'));
-                    if (!rows.length) {
-                        statusEl.textContent = "No empty rows to suggest for.";
-                        return;
-                    }
-                    running = true;
-                    cancelled = false;
-                    const originalLabel = bulkBtn.innerHTML;
-                    bulkBtn.textContent = "Cancel";
-                    let done = 0, ok = 0, skipped = 0;
-                    for (const row of rows) {
-                        if (cancelled) break;
-                        const bookId = row.dataset.bookId;
-                        const title = (row.dataset.bookTitle || "").trim();
-                        if (!bookId || !title) { done++; continue; }
-                        statusEl.textContent = "Suggesting " + (done + 1) + "/" + rows.length + ": " + title;
-                        try {
-                            const inferRes = await fetch("/api/infer_genres", {
+
+                    cancelRequested = false;
+                    totalUpdated = 0;
+                    totalSkipped = 0;
+                    totalToProcess = bulkSuggestRemaining;
+                    setRunningState();
+                    statusEl.textContent = "Inferring genres…";
+
+                    try {
+                        while (!cancelRequested && bulkSuggestRemaining > 0) {
+                            controller = new AbortController();
+                            const response = await fetch("/api/bulk_suggest_genres/" + category, {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ title: title }),
+                                body: JSON.stringify({ batch_size: bulkSuggestBatchSize }),
+                                signal: controller.signal,
                             });
-                            if (!inferRes.ok) throw new Error("infer HTTP " + inferRes.status);
-                            const inferData = await inferRes.json();
-                            const genres = (inferData.suggestions || [])
-                                .map(function (s) { return s.genre; })
-                                .filter(Boolean);
-                            if (!genres.length) { skipped++; done++; continue; }
-                            const joined = genres.join(", ");
-                            const saveRes = await fetch("/api/update_genres/" + category + "/" + bookId, {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ genres: joined }),
+                            controller = null;
+                            if (!response.ok) throw new Error("HTTP " + response.status);
+                            const data = await response.json();
+                            const books = data.books || [];
+
+                            // Patch any rows currently in the DOM (lazy-load may have not pulled all yet).
+                            books.forEach(function (book) {
+                                const row = document.querySelector('tr.book-row[data-book-id="' + book.id + '"]');
+                                if (!row) return;
+                                row.querySelectorAll('.book-info-pair').forEach(function (pair) {
+                                    const dt = pair.querySelector('dt');
+                                    if (dt && dt.textContent.trim() === "Genres") {
+                                        const dd = pair.querySelector('dd');
+                                        if (dd) dd.textContent = book.genres;
+                                    }
+                                });
+                                const editInput = row.querySelector('form.book-info-edit [name="genres"]');
+                                if (editInput) editInput.value = book.genres;
+                                row.dataset.needsGenres = "0";
                             });
-                            if (!saveRes.ok) throw new Error("save HTTP " + saveRes.status);
-                            // Update the visible display + edit form value + row marker.
-                            const allDds = row.querySelectorAll('.book-info-pair');
-                            allDds.forEach(function (pair) {
-                                const dt = pair.querySelector('dt');
-                                if (dt && dt.textContent.trim() === "Genres") {
-                                    const dd = pair.querySelector('dd');
-                                    if (dd) dd.textContent = joined;
-                                }
-                            });
-                            const editInput = row.querySelector('form.book-info-edit [name="genres"]');
-                            if (editInput) editInput.value = joined;
-                            row.dataset.needsGenres = "0";
-                            decrementBulkSuggestCount();
-                            ok++;
-                        } catch (err) {
-                            skipped++;
+
+                            totalUpdated += data.updated || 0;
+                            totalSkipped += data.skipped || 0;
+                            if (typeof data.remaining === "number") {
+                                bulkSuggestRemaining = Math.max(0, data.remaining);
+                            } else {
+                                bulkSuggestRemaining = Math.max(0, bulkSuggestRemaining - (data.updated || 0));
+                            }
+                            refreshCount();
+
+                            if (cancelRequested) break;
+                            if (bulkSuggestRemaining > 0) {
+                                const totalChecked = totalUpdated + totalSkipped;
+                                statusEl.textContent = "Progress: " + totalChecked + " / " + totalToProcess + " checked, " + totalUpdated + " updated, " + totalSkipped + " skipped, " + bulkSuggestRemaining + " left…";
+                            }
                         }
-                        done++;
-                        refreshCount();
+
+                        if (cancelRequested) {
+                            const totalChecked = totalUpdated + totalSkipped;
+                            statusEl.textContent = "Cancelled. " + totalChecked + " / " + totalToProcess + " checked, " + totalUpdated + " updated, " + totalSkipped + " skipped, " + bulkSuggestRemaining + " left.";
+                        } else {
+                            const totalChecked = totalUpdated + totalSkipped;
+                            statusEl.textContent = "Done. " + totalChecked + " checked, " + totalUpdated + " updated, " + totalSkipped + " skipped.";
+                        }
+                    } catch (err) {
+                        if (err && err.name === "AbortError") {
+                            const totalChecked = totalUpdated + totalSkipped;
+                            statusEl.textContent = "Cancelled. " + totalChecked + " / " + totalToProcess + " checked, " + totalUpdated + " updated, " + totalSkipped + " skipped, " + bulkSuggestRemaining + " left.";
+                        } else {
+                            statusEl.textContent = "Suggestion failed: " + (err.message || err);
+                        }
+                    } finally {
+                        setIdleState();
                     }
-                    statusEl.textContent =
-                        (cancelled ? "Cancelled. " : "Done. ") +
-                        ok + " updated, " + skipped + " skipped.";
-                    bulkBtn.innerHTML = originalLabel;
-                    refreshCount();
-                    running = false;
-                    cancelled = false;
                 });
             })();
         });

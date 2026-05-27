@@ -1,5 +1,5 @@
-# Reading Records 
-![Homepage](Images/Homepage.png)
+# Book Records 
+![Homepage](images/Homepage.png)
 
 ## Description
 - Book list for unpublished books 
@@ -14,7 +14,7 @@
 6. Bootstrap 5
 7. SQLite3
 
-![Repository Diagram](Images/Repository_Diagram.png)
+![Repository Diagram](images/Repository_Diagram.png)
 
 ## Features:
 1. Login functionality allows user's book list and tastes to remain privacy 

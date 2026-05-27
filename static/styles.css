@@ -274,6 +274,11 @@ a:hover
     color: #DCE0D9;
 }
 
+body.site-mode-shows .home-hero {
+    background: linear-gradient(135deg, rgba(11, 94, 168, 0.95), rgba(8, 71, 128, 0.92));
+    color: #eaf4fd;
+}
+
 .home-hero .card-body {
     padding: 2rem;
 }
@@ -322,6 +327,18 @@ a:hover
     color: #31081F !important;
 }
 
+body.site-mode-shows .home-action-primary {
+    background: #f5fbff;
+    border-color: #f5fbff;
+    color: #083a66 !important;
+}
+
+body.site-mode-shows .home-action-primary:hover {
+    background: #dbeefd;
+    border-color: #dbeefd;
+    color: #083a66 !important;
+}
+
 .home-hero .btn-outline-light {
     border-color: rgba(248, 248, 242, 0.65);
     color: #F8F8F2;
@@ -333,9 +350,31 @@ a:hover
     border-color: #F8F8F2;
 }
 
+body.site-mode-shows .home-hero .btn-outline-light {
+    border-color: rgba(245, 251, 255, 0.72);
+    color: #f5fbff;
+}
+
+body.site-mode-shows .home-hero .btn-outline-light:hover {
+    background: rgba(245, 251, 255, 0.14);
+    color: #fff;
+    border-color: #f5fbff;
+}
+
 .summary-card {
     border-radius: 20px;
     background: linear-gradient(180deg, rgba(255,255,255,0.92), rgba(255,255,255,0.74));
+}
+
+body.site-mode-shows .summary-card {
+    background: linear-gradient(180deg, rgba(246, 251, 255, 0.94), rgba(231, 242, 251, 0.8));
+}
+
+body.site-mode-shows .home-dashboard .summary-label,
+body.site-mode-shows .home-dashboard .summary-value,
+body.site-mode-shows .home-dashboard .text-muted,
+body.site-mode-shows .home-dashboard .grey-text {
+    color: #0b4f8a;
 }
 
 .summary-label {
@@ -1986,6 +2025,43 @@ a:hover
     color: #7a5a00;
 }
 
+body.site-mode-shows .search-hero {
+    background: linear-gradient(135deg, rgba(11, 94, 168, 0.95), rgba(8, 71, 128, 0.92));
+}
+
+body.site-mode-shows .search-card {
+    border-color: rgba(8, 71, 128, 0.12);
+    box-shadow: 0 6px 16px rgba(10, 54, 96, 0.06);
+}
+
+body.site-mode-shows .search-card .search-title {
+    color: #0d4476;
+}
+
+body.site-mode-shows .search-card .search-meta {
+    color: #4c6d8d;
+}
+
+body.site-mode-shows .search-card .search-status {
+    background: rgba(11, 94, 168, 0.12);
+    color: #0b5ea8;
+}
+
+body.site-mode-shows .search-card .search-status.series-book-category-completed {
+    background: rgba(46, 110, 52, 0.14);
+    color: #2e6e34;
+}
+
+body.site-mode-shows .search-card .search-status.series-book-category-tbr {
+    background: rgba(11, 94, 168, 0.14);
+    color: #0b5ea8;
+}
+
+body.site-mode-shows .search-card .search-status.series-book-category-unfinished {
+    background: rgba(149, 109, 0, 0.14);
+    color: #7a5a00;
+}
+
 /* Centered form panels (login / register / add) */
 .form-panel {
     max-width: 480px;
@@ -2562,6 +2638,144 @@ a:hover
         width: 100%;
         justify-content: center;
     }
+}
+
+body.site-mode-shows {
+    background-color: #e8f2fb;
+}
+
+body.site-mode-shows .bg,
+body.site-mode-shows .red,
+body.site-mode-shows .button:hover {
+    background-color: #0b5ea8;
+}
+
+body.site-mode-shows .red:hover,
+body.site-mode-shows .red:focus,
+body.site-mode-shows .red:active,
+body.site-mode-shows .button:hover {
+    background-color: #094d8a !important;
+    border-color: #094d8a !important;
+}
+
+body.site-mode-shows .hidden-info {
+    background-color: #0d4476;
+    color: #f4f9ff;
+    border-color: #c9def5;
+}
+
+body.site-mode-shows .hidden-info:hover {
+    background-color: #d9e9f8;
+    border-color: #0d4476 !important;
+    color: #0d4476;
+}
+
+body.site-mode-shows .main-nav {
+    background: linear-gradient(180deg, #0b5ea8 0%, #084780 100%);
+    box-shadow: 0 4px 14px rgba(10, 54, 96, 0.25);
+}
+
+body.site-mode-shows .main-nav-brand,
+body.site-mode-shows .main-nav .nav-link,
+body.site-mode-shows .main-nav .btn-outline-light {
+    color: rgba(248, 252, 255, 0.92) !important;
+}
+
+body.site-mode-shows .main-nav-brand:hover,
+body.site-mode-shows .main-nav-brand:focus,
+body.site-mode-shows .main-nav .nav-link:hover,
+body.site-mode-shows .main-nav .nav-link:focus,
+body.site-mode-shows .main-nav .btn-outline-light:hover,
+body.site-mode-shows .main-nav .btn-outline-light:focus {
+    color: #fff !important;
+    background: rgba(255, 255, 255, 0.12);
+}
+
+body.site-mode-shows .main-nav .nav-link.active,
+body.site-mode-shows .main-nav .dropdown-item.active,
+body.site-mode-shows .main-nav .dropdown-item:active {
+    background: rgba(255, 255, 255, 0.16);
+    color: #fff;
+}
+
+body.site-mode-shows .main-nav .dropdown-menu {
+    background: linear-gradient(180deg, #084780 0%, #06355f 100%);
+    border-color: rgba(255, 255, 255, 0.14);
+    box-shadow: 0 14px 28px rgba(10, 54, 96, 0.24);
+}
+
+body.site-mode-shows .main-nav .dropdown-item {
+    color: rgba(248, 252, 255, 0.92);
+}
+
+body.site-mode-shows .main-nav img {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+body.site-mode-shows .random-modal-primary {
+    background: #0b5ea8;
+    border-color: #0b5ea8;
+}
+
+body.site-mode-shows .random-modal-primary:hover,
+body.site-mode-shows .random-modal-primary:focus {
+    background: #094d8a;
+    border-color: #094d8a;
+}
+
+body.site-mode-shows .book-detail-modal .modal-content {
+    box-shadow: 0 22px 50px rgba(10, 54, 96, 0.28);
+}
+
+body.site-mode-shows .book-detail-modal .modal-header {
+    background: linear-gradient(135deg, rgba(11, 94, 168, 0.96), rgba(8, 71, 128, 0.94));
+}
+
+body.site-mode-shows .book-detail-modal .modal-body {
+    background: linear-gradient(180deg, #f6fbff 0%, #eaf4fd 100%);
+}
+
+body.site-mode-shows .book-detail-title,
+body.site-mode-shows .book-detail-pair dd,
+body.site-mode-shows .book-detail-notes-text,
+body.site-mode-shows .book-detail-edit-field input,
+body.site-mode-shows .book-detail-edit-field textarea {
+    color: #083a66;
+}
+
+body.site-mode-shows .book-detail-pair dt,
+body.site-mode-shows .book-detail-notes-label,
+body.site-mode-shows .book-detail-edit-field > span {
+    color: #0b5ea8;
+}
+
+body.site-mode-shows .book-detail-notes-section {
+    border-color: rgba(11, 94, 168, 0.16);
+}
+
+body.site-mode-shows .book-detail-edit-field input:focus,
+body.site-mode-shows .book-detail-edit-field textarea:focus {
+    border-color: #0b5ea8;
+    box-shadow: 0 0 0 0.15rem rgba(11, 94, 168, 0.2);
+}
+
+body.site-mode-shows .book-detail-modal .modal-footer {
+    background: rgba(246, 251, 255, 0.94);
+}
+
+body.site-mode-shows .timeline-modern {
+    border-left-color: rgba(11, 94, 168, 0.24);
+}
+
+body.site-mode-shows .timeline-modern-item::before {
+    background: #0b5ea8;
+    box-shadow: 0 0 0 4px rgba(11, 94, 168, 0.12);
+}
+
+body.site-mode-shows .genres-stat-pill strong,
+body.site-mode-shows .predict-result-title:hover,
+body.site-mode-shows .predict-next-title:hover {
+    color: #0b5ea8;
 }
 
 /* ---------- Genres page ---------- */
@@ -3503,4 +3717,676 @@ a:hover
 
 .favorites-section-toggle.collapsed .favorites-section-toggle-icon {
     transform: rotate(-90deg);
+}
+
+/* ==================================================================
+   Show Records (shows mode) — re-tint anything still wine/red so the
+   blue palette is consistent across cards, filters, modals, and
+   analytics. Colour map applied below:
+       #6B0F1A      → #0b5ea8 (primary blue)
+       #560C15      → #084780 (darker blue, hover state)
+       #8a1828      → #1574c0 (lighter blue, gradient stop)
+       #31081F      → #083a66 (deep blue, replaces wine ink)
+       #2b0a18      → #082a4d (near-black blue)
+       rgba(107,15,26,a) → rgba(11,94,168,a)
+       rgba(49,8,31,a)  → rgba(10,54,96,a)
+       warm neutrals (#3a2a25/#5a4a45/#8a7c75/#e0d7cf/#f0e6dd/...) →
+           cool neutrals (#0d3a64/#3d5876/#6c89a8/#c9def5/#dbeaf7/...)
+   ================================================================== */
+
+/* Titles and generic text */
+body.site-mode-shows .title,
+body.site-mode-shows .purple-text,
+body.site-mode-shows .purple-text:hover {
+    color: #083a66;
+}
+
+body.site-mode-shows .red-text {
+    color: #0b5ea8;
+}
+
+/* Generic focus indicators */
+body.site-mode-shows :focus-visible,
+body.site-mode-shows input:focus-visible,
+body.site-mode-shows textarea:focus-visible,
+body.site-mode-shows select:focus-visible,
+body.site-mode-shows button:focus-visible,
+body.site-mode-shows a:focus-visible {
+    outline-color: rgba(11, 94, 168, 0.18);
+}
+
+body.site-mode-shows :focus,
+body.site-mode-shows input:focus,
+body.site-mode-shows textarea:focus,
+body.site-mode-shows select:focus,
+body.site-mode-shows button:focus,
+body.site-mode-shows a:focus {
+    box-shadow: 0 0 0 3px rgba(11, 94, 168, 0.12);
+}
+
+/* Form-select tinted variant */
+body.site-mode-shows .form-select.grey {
+    color: #083a66 !important;
+    border-color: rgba(10, 54, 96, 0.22) !important;
+    background-image: linear-gradient(45deg, transparent 50%, rgba(10,54,96,0.36) 50%), linear-gradient(135deg, rgba(10,54,96,0.36) 50%, transparent 50%);
+}
+body.site-mode-shows .form-select.grey:focus {
+    outline-color: rgba(11, 94, 168, 0.12);
+    box-shadow: 0 8px 20px rgba(10, 54, 96, 0.06);
+}
+
+/* Book cards */
+body.site-mode-shows .book-card {
+    border-color: rgba(10, 54, 96, 0.10);
+    box-shadow: 0 8px 18px rgba(10, 54, 96, 0.06);
+}
+body.site-mode-shows .book-card-link:hover,
+body.site-mode-shows .book-card-link:focus {
+    box-shadow: 0 14px 24px rgba(10, 54, 96, 0.14);
+}
+body.site-mode-shows .book-title {
+    color: #083a66;
+}
+body.site-mode-shows .book-meta {
+    color: #3d5876;
+}
+
+/* Home accordion */
+body.site-mode-shows .home-accordion .accordion-item {
+    border-color: rgba(10, 54, 96, 0.12);
+}
+body.site-mode-shows .home-accordion .accordion-button,
+body.site-mode-shows .home-accordion .accordion-button:not(.collapsed) {
+    color: #083a66;
+}
+
+/* Home section header */
+body.site-mode-shows .home-section-header {
+    background: rgba(220, 232, 245, 0.55);
+    border-bottom-color: rgba(10, 54, 96, 0.10);
+}
+
+/* Summary card label/value (covers remaining wine values) */
+body.site-mode-shows .summary-label {
+    color: #0b5ea8;
+}
+body.site-mode-shows .summary-value {
+    color: #083a66;
+}
+
+/* Panel scroll background tint */
+body.site-mode-shows .panel-scroll-panel {
+    background: linear-gradient(180deg, rgba(255,255,255,0.95), rgba(231, 242, 251, 0.88));
+}
+body.site-mode-shows .timeline-panel-body {
+    background: linear-gradient(180deg, rgba(231, 242, 251, 0.9), rgba(255,255,255,0.96));
+}
+
+/* Series page */
+body.site-mode-shows .series-card {
+    border-color: rgba(10, 54, 96, 0.12);
+    box-shadow: 0 6px 16px rgba(10, 54, 96, 0.06);
+}
+body.site-mode-shows .series-card-header {
+    background: linear-gradient(135deg, rgba(11, 94, 168, 0.96), rgba(8, 71, 128, 0.94));
+}
+body.site-mode-shows .series-book + .series-book {
+    border-top-color: rgba(10, 54, 96, 0.06);
+}
+body.site-mode-shows .series-book-link {
+    color: #083a66;
+}
+body.site-mode-shows .series-book-link:hover,
+body.site-mode-shows .series-book-link:focus {
+    background: rgba(11, 94, 168, 0.07);
+    color: #083a66;
+}
+
+/* Book table */
+body.site-mode-shows .book-table {
+    background: rgba(255, 255, 255, 0.94);
+    box-shadow: 0 6px 16px rgba(10, 54, 96, 0.05);
+}
+body.site-mode-shows .book-table thead th {
+    background: rgba(10, 54, 96, 0.05);
+    color: #083a66;
+    border-bottom-color: rgba(10, 54, 96, 0.12);
+}
+body.site-mode-shows .table.book-table tbody tr.book-row:hover {
+    box-shadow: 0 14px 30px rgba(10, 54, 96, 0.06);
+}
+body.site-mode-shows .book-name {
+    color: #083a66;
+}
+body.site-mode-shows .book-name-delete:hover {
+    background: rgba(11, 94, 168, 0.08);
+}
+body.site-mode-shows .book-status-badge {
+    background: rgba(11, 94, 168, 0.10);
+    color: #0b5ea8;
+}
+body.site-mode-shows .book-info-toggle:hover {
+    background: rgba(10, 54, 96, 0.08);
+}
+body.site-mode-shows .book-row[data-book-link]:hover {
+    background-color: transparent;
+}
+
+/* Book list filters */
+body.site-mode-shows .book-page-search-input {
+    border-color: rgba(10, 54, 96, 0.18);
+    color: #083a66;
+}
+body.site-mode-shows .book-page-search-input::placeholder {
+    color: rgba(10, 54, 96, 0.55);
+}
+body.site-mode-shows .book-page-search-input:focus {
+    border-color: #0b5ea8;
+    box-shadow: 0 0 0 0.16rem rgba(11, 94, 168, 0.12);
+}
+body.site-mode-shows .book-list-filters .form-select.filter-active {
+    border-color: #0b5ea8;
+    background-color: rgba(11, 94, 168, 0.08);
+    color: #0b5ea8;
+    box-shadow: 0 0 0 1px rgba(11, 94, 168, 0.35);
+}
+body.site-mode-shows .book-list-filters .form-select.filter-active:focus {
+    box-shadow: 0 0 0 0.2rem rgba(11, 94, 168, 0.25);
+}
+
+/* Series filter inputs */
+body.site-mode-shows .series-filters .series-filter-input {
+    border-color: rgba(10, 54, 96, 0.18);
+    color: #083a66;
+}
+body.site-mode-shows .series-filters .series-filter-input::placeholder {
+    color: #6c89a8;
+}
+body.site-mode-shows .series-filters .series-filter-input:focus {
+    border-color: #0b5ea8;
+    box-shadow: 0 0 0 0.2rem rgba(11, 94, 168, 0.15);
+}
+body.site-mode-shows .series-filters .series-filter-clear {
+    border-color: #083a66;
+    color: #083a66;
+}
+body.site-mode-shows .series-filters .series-filter-clear:hover,
+body.site-mode-shows .series-filters .series-filter-clear:focus {
+    background-color: #083a66;
+    border-color: #083a66;
+    color: #eaf4fd;
+}
+
+/* Book "sticky note" detail card */
+body.site-mode-shows .book-info-edit-btn {
+    color: #083a66;
+    border-color: rgba(10, 54, 96, 0.18);
+}
+body.site-mode-shows .book-info-edit-btn:hover,
+body.site-mode-shows .book-info-edit-btn:focus {
+    background: #083a66;
+    border-color: #083a66;
+    color: #f6fbff;
+}
+body.site-mode-shows .book-edit-label,
+body.site-mode-shows .book-info-pair dt,
+body.site-mode-shows .book-info-notes-label,
+body.site-mode-shows .book-save-status {
+    color: #0b5ea8;
+}
+body.site-mode-shows .book-info-pair dd,
+body.site-mode-shows .book-info-notes-text {
+    color: #083a66;
+}
+body.site-mode-shows .book-edit-field input,
+body.site-mode-shows .book-edit-field textarea {
+    border-color: rgba(10, 54, 96, 0.25);
+    color: #083a66;
+}
+body.site-mode-shows .book-edit-field input:focus,
+body.site-mode-shows .book-edit-field textarea:focus {
+    border-color: #0b5ea8;
+    box-shadow: 0 0 0 0.15rem rgba(11, 94, 168, 0.22);
+}
+body.site-mode-shows .book-info-notes {
+    border-left-color: rgba(10, 54, 96, 0.10);
+}
+body.site-mode-shows .book-action-btn:hover {
+    background: rgba(11, 94, 168, 0.08);
+}
+
+/* Choose FAB */
+body.site-mode-shows .choose-fab .btn {
+    box-shadow: 0 8px 18px rgba(11, 94, 168, 0.3);
+}
+
+/* Random modal */
+body.site-mode-shows .random-modal .modal-content {
+    box-shadow: 0 22px 50px rgba(10, 54, 96, 0.32);
+}
+body.site-mode-shows .random-modal .modal-header {
+    background: linear-gradient(135deg, rgba(11, 94, 168, 0.96), rgba(8, 71, 128, 0.94));
+}
+body.site-mode-shows .random-modal .modal-body {
+    background:
+        radial-gradient(circle at top right, rgba(11, 94, 168, 0.08), transparent 60%),
+        linear-gradient(180deg, #f6fbff 0%, #eaf4fd 100%);
+}
+body.site-mode-shows .random-modal-spotlight {
+    background: rgba(255, 255, 255, 0.7);
+    border-color: rgba(11, 94, 168, 0.28);
+}
+body.site-mode-shows .random-modal-kicker,
+body.site-mode-shows .random-modal-badge-label,
+body.site-mode-shows .random-modal-notes-label {
+    color: #0b5ea8;
+}
+body.site-mode-shows .random-modal-title,
+body.site-mode-shows .random-modal-badge,
+body.site-mode-shows .random-modal-notes-text {
+    color: #083a66;
+}
+body.site-mode-shows .random-modal-badge {
+    border-color: rgba(10, 54, 96, 0.14);
+}
+body.site-mode-shows .random-modal-badge-status {
+    background: rgba(11, 94, 168, 0.10);
+    border-color: rgba(11, 94, 168, 0.28);
+}
+body.site-mode-shows .random-modal-badge-series {
+    background: rgba(10, 54, 96, 0.08);
+    border-color: rgba(10, 54, 96, 0.22);
+}
+body.site-mode-shows .random-modal-notes {
+    background: rgba(255, 255, 255, 0.82);
+    border-color: rgba(10, 54, 96, 0.12);
+}
+body.site-mode-shows .random-modal .modal-footer {
+    background: rgba(246, 251, 255, 0.94);
+    border-top-color: rgba(10, 54, 96, 0.10);
+}
+
+/* Search modal (override the red gradient + accents) */
+body.site-mode-shows .search-modal .modal-content {
+    box-shadow: 0 22px 50px rgba(10, 54, 96, 0.32);
+}
+body.site-mode-shows .search-modal .modal-header {
+    background: linear-gradient(135deg, rgba(11, 94, 168, 0.96), rgba(8, 71, 128, 0.94));
+}
+body.site-mode-shows .search-modal .modal-body {
+    background: linear-gradient(180deg, #f6fbff 0%, #eaf4fd 100%);
+}
+body.site-mode-shows .search-modal .modal-footer {
+    background: linear-gradient(180deg, rgba(255,255,255,0.99), rgba(231, 242, 251, 0.96));
+    border-top-color: rgba(10, 54, 96, 0.10);
+}
+body.site-mode-shows .search-modal-input {
+    border-color: rgba(10, 54, 96, 0.14);
+    color: #083a66;
+}
+body.site-mode-shows .search-modal-input::placeholder {
+    color: rgba(10, 54, 96, 0.55);
+}
+body.site-mode-shows .search-modal-input:focus {
+    border-color: #0b5ea8;
+    box-shadow: 0 0 0 0.2rem rgba(11, 94, 168, 0.16);
+}
+
+/* Form panels */
+body.site-mode-shows .form-panel {
+    box-shadow: 0 12px 28px rgba(10, 54, 96, 0.1);
+}
+body.site-mode-shows .form-panel h2,
+body.site-mode-shows .form-panel h3 {
+    color: #083a66;
+}
+
+/* Predict next book */
+body.site-mode-shows .predict-next-card {
+    background: linear-gradient(135deg, #f6fbff 0%, #dbeefd 100%);
+    border-color: #c4dcf3;
+}
+body.site-mode-shows .predict-next-title {
+    color: #0b5ea8;
+}
+body.site-mode-shows .predict-next-hint {
+    color: #4c6885;
+}
+body.site-mode-shows .predict-next-btn {
+    background: #0b5ea8;
+    border-color: #0b5ea8;
+    box-shadow: 0 4px 10px rgba(11, 94, 168, 0.22);
+}
+body.site-mode-shows .predict-next-btn:hover {
+    background: #084780;
+    border-color: #084780;
+}
+body.site-mode-shows .predict-result-card {
+    border-color: #c9def5;
+    box-shadow: 0 2px 8px rgba(10, 54, 96, 0.06);
+}
+body.site-mode-shows .predict-result-empty,
+body.site-mode-shows .predict-next-hint {
+    color: #4c6885;
+}
+body.site-mode-shows .predict-result-reroll {
+    border-color: #c9def5;
+    color: #0b5ea8;
+}
+body.site-mode-shows .predict-result-reroll:hover {
+    background: #eef6ff;
+    color: #0b5ea8;
+    border-color: #0b5ea8;
+}
+body.site-mode-shows .predict-result-title {
+    color: #083a66;
+}
+
+/* Trends page */
+body.site-mode-shows .trends-current-card {
+    border-left-color: rgba(11, 94, 168, 0.55);
+    background: #f6fbff;
+}
+body.site-mode-shows .trends-genre-badge-strong {
+    background: rgba(11, 94, 168, 0.08);
+    color: #0b5ea8;
+    border-color: rgba(11, 94, 168, 0.14);
+}
+body.site-mode-shows .trends-period-current {
+    border-color: rgba(11, 94, 168, 0.3);
+    background: #f6fbff;
+}
+body.site-mode-shows .trends-period-details summary {
+    color: #0b5ea8;
+}
+body.site-mode-shows .trends-chart-line-volume {
+    stroke: #0b5ea8;
+}
+body.site-mode-shows .trends-chart-tooltip {
+    background: rgba(246, 251, 255, 0.98);
+    border-color: #c9def5;
+    box-shadow: 0 10px 24px rgba(10, 54, 96, 0.12);
+    color: #0d3a64;
+}
+body.site-mode-shows .trends-chart-tooltip-title {
+    color: #0b5ea8;
+}
+body.site-mode-shows .trends-period-range,
+body.site-mode-shows .trends-reread-title,
+body.site-mode-shows .trends-chart-title {
+    color: #0d3a64;
+}
+body.site-mode-shows .trends-reread-title:hover {
+    color: #0b5ea8;
+}
+body.site-mode-shows .trends-missing-group summary {
+    color: #0d3a64;
+}
+body.site-mode-shows .trends-missing-group summary::before {
+    color: #0b5ea8;
+}
+body.site-mode-shows .trends-missing-group[open] {
+    background: #f6fbff;
+}
+body.site-mode-shows .trends-missing-summary-count {
+    background: #0b5ea8;
+}
+body.site-mode-shows .trends-missing-item a {
+    color: #0d3a64;
+}
+body.site-mode-shows .trends-missing-item a:hover {
+    color: #0b5ea8;
+}
+body.site-mode-shows .trends-breadcrumb a {
+    color: #0b5ea8;
+}
+
+/* Genres page */
+body.site-mode-shows .genres-page,
+body.site-mode-shows .analytics-page,
+body.site-mode-shows .trends-genre-badge,
+body.site-mode-shows .genres-stat-pill,
+body.site-mode-shows .genres-filter-check,
+body.site-mode-shows .genre-card-name,
+body.site-mode-shows .analytics-section-title,
+body.site-mode-shows .analytics-span-endpoint-date,
+body.site-mode-shows .analytics-bar-label,
+body.site-mode-shows .analytics-bar-count,
+body.site-mode-shows .analytics-legend-label,
+body.site-mode-shows .analytics-legend-count,
+body.site-mode-shows .analytics-list-title,
+body.site-mode-shows .analytics-span-duration {
+    color: #0d3a64;
+}
+body.site-mode-shows .genres-stat-pill {
+    background: #fff;
+    border-color: #c9def5;
+}
+body.site-mode-shows .trends-genre-badge {
+    background: #eaf4fd;
+    border-color: #c9def5;
+}
+body.site-mode-shows .genres-trends-link,
+body.site-mode-shows .genre-card-chevron,
+body.site-mode-shows .genre-card-total-number {
+    color: #0b5ea8;
+}
+body.site-mode-shows .genres-filter-check input,
+body.site-mode-shows .genres-filter-bar input[type="checkbox"] {
+    accent-color: #0b5ea8;
+}
+body.site-mode-shows .genres-filter-bar {
+    background: #fff;
+    border-color: #c9def5;
+}
+body.site-mode-shows .genres-filter-field label,
+body.site-mode-shows .analytics-mini-subtitle,
+body.site-mode-shows .analytics-pace-sublabel,
+body.site-mode-shows .analytics-month-label,
+body.site-mode-shows .analytics-stat-sublabel,
+body.site-mode-shows .analytics-list-meta,
+body.site-mode-shows .analytics-legend-percent,
+body.site-mode-shows .analytics-span-endpoint-label,
+body.site-mode-shows .analytics-bar-percent,
+body.site-mode-shows .genre-card-total-label,
+body.site-mode-shows .genre-category-count,
+body.site-mode-shows .trends-reread-date,
+body.site-mode-shows .trends-period-meta,
+body.site-mode-shows .trends-meta,
+body.site-mode-shows .trends-chart-axis-label,
+body.site-mode-shows .trends-chart-legend-total,
+body.site-mode-shows .trends-period-break-label,
+body.site-mode-shows .trends-missing-meta,
+body.site-mode-shows .genres-result-count,
+body.site-mode-shows .genres-subtitle,
+body.site-mode-shows .analytics-subtitle,
+body.site-mode-shows .analytics-note,
+body.site-mode-shows .trends-chart-sub {
+    color: #6c89a8;
+}
+body.site-mode-shows .genres-filter-reset {
+    border-color: #c9def5;
+    color: #0b5ea8;
+}
+body.site-mode-shows .genres-filter-reset:hover {
+    background: #eef6ff;
+    color: #0b5ea8;
+    border-color: #0b5ea8;
+}
+body.site-mode-shows .genre-card,
+body.site-mode-shows .trends-period-item,
+body.site-mode-shows .trends-reread-item,
+body.site-mode-shows .trends-missing-group,
+body.site-mode-shows .trends-chart-card,
+body.site-mode-shows .analytics-stat-card,
+body.site-mode-shows .analytics-span-card,
+body.site-mode-shows .analytics-pace-card,
+body.site-mode-shows .analytics-two-col-pane,
+body.site-mode-shows .analytics-mix-card {
+    border-color: #c9def5;
+}
+body.site-mode-shows .genre-card[open] {
+    box-shadow: 0 1px 4px rgba(11, 94, 168, 0.08);
+}
+body.site-mode-shows .genre-card-bar-track,
+body.site-mode-shows .analytics-bar-track {
+    background: #e0eaf5;
+}
+body.site-mode-shows .genre-card-bar-fill {
+    background: linear-gradient(to right, #1574c0, #0b5ea8);
+}
+body.site-mode-shows .genre-card-body {
+    border-top-color: #e0eaf5;
+}
+body.site-mode-shows .genre-card-chip {
+    background: #e6f0fa;
+    color: #1f3a5c;
+}
+body.site-mode-shows .genre-card-chip-completed {
+    background: #dbeefd;
+    color: #0b5ea8;
+}
+body.site-mode-shows .genre-book-list li {
+    border-bottom-color: #d6e4f5;
+}
+body.site-mode-shows .genre-book-list a {
+    color: #0d3a64;
+}
+body.site-mode-shows .genre-book-list a:hover {
+    color: #0b5ea8;
+}
+
+/* Analytics page */
+body.site-mode-shows .analytics-stat-card-accent {
+    border-color: #0b5ea8;
+    background: #f6fbff;
+}
+body.site-mode-shows .analytics-stat-value,
+body.site-mode-shows .analytics-mini-value,
+body.site-mode-shows .analytics-pace-value,
+body.site-mode-shows .analytics-pie-center-value,
+body.site-mode-shows .analytics-span-duration strong {
+    color: #0b5ea8;
+}
+body.site-mode-shows .analytics-stat-label,
+body.site-mode-shows .analytics-pace-label,
+body.site-mode-shows .analytics-mini-label {
+    color: #3d5876;
+}
+body.site-mode-shows .analytics-span-track-line {
+    background: linear-gradient(to right, #e0eaf5, #0b5ea8, #e0eaf5);
+}
+body.site-mode-shows .analytics-stack-bar {
+    border-color: #c9def5;
+    background: #eaf2fb;
+}
+body.site-mode-shows .analytics-stack-completed {
+    background: #0b5ea8;
+}
+body.site-mode-shows .analytics-stack-tbr {
+    background: #6790c2;
+}
+body.site-mode-shows .analytics-stack-unfinished {
+    background: #8aa4c3;
+}
+body.site-mode-shows .analytics-pie-chart {
+    box-shadow: inset 0 0 0 1px #c9def5;
+    background: conic-gradient(#0b5ea8 0 0, #6790c2 0 0, #8aa4c3 0 0);
+}
+body.site-mode-shows .analytics-pie-chart::after {
+    background: linear-gradient(180deg, #f6fbff 0%, #eaf4fd 100%);
+    box-shadow: inset 0 0 0 1px rgba(201, 222, 245, 0.8);
+}
+body.site-mode-shows .analytics-mini-card {
+    background: #f6fbff;
+    border-color: #c9def5;
+}
+body.site-mode-shows .analytics-bar-fill {
+    background: #0b5ea8;
+}
+body.site-mode-shows .analytics-bar-fill-accent {
+    background: linear-gradient(to right, #1574c0, #0b5ea8);
+}
+body.site-mode-shows .analytics-bar-fill-secondary {
+    background: #6790c2;
+}
+body.site-mode-shows .analytics-month-bar {
+    background: linear-gradient(to top, #0b5ea8, #1574c0);
+}
+body.site-mode-shows .analytics-month-chart {
+    border-bottom-color: #c9def5;
+}
+body.site-mode-shows .analytics-report-card {
+    background: linear-gradient(135deg, #f6fbff, #fff);
+    border-color: #c9def5;
+    box-shadow: 0 8px 20px rgba(10, 54, 96, 0.04);
+}
+body.site-mode-shows .analytics-report-hint {
+    color: #6c89a8;
+}
+body.site-mode-shows .analytics-list-row {
+    border-bottom-color: #d6e4f5;
+}
+body.site-mode-shows .analytics-section-title {
+    border-bottom-color: #d6e4f5;
+}
+body.site-mode-shows .trends-missing-section {
+    border-top-color: #d6e4f5;
+}
+body.site-mode-shows .trends-period-break::before,
+body.site-mode-shows .trends-period-break::after {
+    background: #c9def5;
+}
+body.site-mode-shows .trends-rereads-card {
+    border-left-color: #6790c2;
+    background: #f6fbff;
+}
+
+/* Favorites section */
+body.site-mode-shows .favorites-section-header {
+    border-bottom-color: rgba(11, 94, 168, 0.15);
+}
+body.site-mode-shows .favorites-section-title {
+    color: #083a66;
+}
+body.site-mode-shows .favorites-section-link,
+body.site-mode-shows .favorites-section-toggle {
+    color: #0b5ea8;
+}
+body.site-mode-shows .favorites-section-toggle {
+    border-color: rgba(11, 94, 168, 0.18);
+}
+body.site-mode-shows .favorites-section-toggle:hover,
+body.site-mode-shows .favorites-section-toggle:focus {
+    background: rgba(11, 94, 168, 0.08);
+    color: #084780;
+}
+body.site-mode-shows .favorites-section-count {
+    color: #6c89a8;
+}
+
+/* Misc shadows/borders still tinted wine */
+body.site-mode-shows .shadow-lg {
+    border-color: #083a66 !important;
+}
+body.site-mode-shows .book-info-card {
+    box-shadow:
+        0 1px 1px rgba(10, 54, 96, 0.12),
+        0 10px 20px rgba(10, 54, 96, 0.18),
+        0 16px 28px -10px rgba(10, 54, 96, 0.22),
+        inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+body.site-mode-shows .book-info-card::before {
+    box-shadow: 0 2px 4px rgba(10, 54, 96, 0.12);
+}
+body.site-mode-shows .book-info-card::after {
+    background: linear-gradient(135deg, transparent 50%, rgba(10, 54, 96, 0.07) 50%, rgba(10, 54, 96, 0.12) 100%);
+}
+body.site-mode-shows .book-pagination {
+    border-color: rgba(10, 54, 96, 0.08);
+}
+@media (max-width: 767px) {
+    body.site-mode-shows .book-info-notes {
+        border-top-color: rgba(10, 54, 96, 0.1);
+    }
 }
