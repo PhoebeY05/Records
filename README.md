@@ -1,9 +1,15 @@
-# Book Records 
-![Homepage](images/Homepage.png)
+# Records 
+1. Book Records
+![Homepage](images/Book_Records.png)
+2. Show Records
+![Homepage](images/Show_Records.png)
+
 
 ## Description
-- Book list for unpublished books 
-   - e.g. Wattpad, 晋江文学城
+- List to record books & shows
+- Supported websites:
+   - Books = Goodreads, MyAnimeList, 晋江文学城, 起点
+   - Shows = MyAnimeList
 
 ## Technologies Used:
 1. Flask
@@ -17,19 +23,22 @@
 ![Repository Diagram](images/Repository_Diagram.png)
 
 ## Features:
-1. Login functionality allows user's book list and tastes to remain privacy 
+1. Login functionality allows user's list and tastes to remain privacy 
 2. Status with standard options like Finishing, Finishing Soon, Left Extras, Uncompleted & customisable option to type anything user prefers
-3. Three categories of "Completed", "Unfinished"(i.e. DNF) & "To Be Read" with their respective pages
-4. Randomly choose a book in one of those categories
-5. Automatically calculates days taken to read the book (days between addition of previous book to current addition)
+3. Three categories of "Completed", "Unfinished"/"On Hold"(i.e. DNF) & "To Be Read"/"Plan to Watch" with their respective pages
+4. Randomly choose a entry in one of those categories
+5. Automatically calculates days taken to read/watch (days between addition of previous entry to current addition)
 6. Filters to check for existence of genres, notes, or series
-7. Timeline views of books added
-   - Specific year: books added to 1 of the above categories in specified year
-   - Recents: books added today, this week or this month
-8. Search function that returns books (even if complete name is not entered)
-9. Convenient switching function from "Unfinished" & "To Be Read" to "Completed" and each other
-10. Easily add 1 to number of times reread
-11. Import multiple books from a .txt file to "Completed", "Unfinished" or "To Be Read"
+7. Timeline views of entries added
+   - Specific year: entries added to 1 of the above categories in specified year
+   - Recents: entries added today, this week or this month
+8. Search function that returns entry (even if complete name is not entered)
+9. Convenient switching function from "Unfinished"/"On Hold" & "To Be Read"/"Plan to WatcH" to "Completed" and each other
+10. Easily add 1 to number of times reread/rewatched
+11. Import multiple entries from a file
+12. See analysis of list & genres
+13. See all related books in series/franchises 
+14. Favourite books
 ## Possible Improvements:
 - [ ] Filter by language
 - [ ] Input to set number of rereads
