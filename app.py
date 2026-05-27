@@ -716,6 +716,14 @@ def extract_import_text(upload):
         if docx_text is not None:
             return docx_text
 
+    for encoding in ("utf-8-sig", "utf-8", "gb18030", "cp1252", "latin-1"):
+        try:
+            return sanitize_import_text(file_bytes.decode(encoding))
+        except UnicodeDecodeError:
+            continue
+
+    return None
+
 
 # --- Genre inference (search first result + page metadata parsing) ---
 
