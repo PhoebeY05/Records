@@ -7,119 +7,758 @@
 {% block main %}
     {% block set %}{% endblock %}
     {% if random is defined and random|length > 0 %}
-    <div class="modal" tabindex="-1" id="random">
-        <div class="modal-dialog">
+    <div class="modal random-modal" tabindex="-1" id="random">
+        <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
           <div class="modal-content">
             <div class="modal-header">
-              <h5 class="modal-title">Random book chosen is:</h5>
+              <span class="random-modal-eyebrow">🎲 Your random pick from {{title}}</span>
               <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-              <h1 class="georgia"> ❗️{{random.book}}❗️</h1>
-              {% if random.status != "None" and random.status != ""%}<h5 class="">Book status is <em>{{random.status}}</em></h5>{% endif %}
-              {% if random.genres != "None" and random.genres != "" %}<h5>Genres of book: <em>{{random.genres}}</em></h5>{% endif %}
-              {% if random.notes != "None" and random.notes != "" %}<h5>Book notes: <em>{{random.notes}}</em></h5>{% endif %}
-              {% if random.series != "" %}<h5>Part of <em>{{random.series}}</em> series</h5>{% endif %}
+              <div class="random-modal-spotlight">
+                <span class="random-modal-kicker">Now reading</span>
+                                <h2 class="random-modal-title">
+                                    <a href="https://www.google.com/search?q={{ random.book | urlencode }}" target="_blank" rel="noopener noreferrer">{{random.book}}</a>
+                                </h2>
+              </div>
+
+              {% set badges = [] %}
+              {% if random.status and random.status != "None" %}{% set _ = badges.append(('Status', random.status, 'status')) %}{% endif %}
+              {% if random.series %}{% set _ = badges.append(('Series', random.series, 'series')) %}{% endif %}
+              {% if random.genres and random.genres != "None" %}{% set _ = badges.append(('Genres', random.genres, 'genres')) %}{% endif %}
+
+              {% if badges %}
+                <div class="random-modal-badges">
+                  {% for label, value, kind in badges %}
+                    <span class="random-modal-badge random-modal-badge-{{kind}}">
+                      <span class="random-modal-badge-label">{{label}}</span>
+                      <span class="random-modal-badge-value">{{value}}</span>
+                    </span>
+                  {% endfor %}
+                </div>
+              {% endif %}
+
+              {% if random.notes and random.notes != "None" %}
+                <div class="random-modal-notes">
+                  <p class="random-modal-notes-label">Your notes</p>
+                                    <p class="random-modal-notes-text">{{ random.notes | e }}</p>
+                </div>
+              {% endif %}
             </div>
             <div class="modal-footer">
-              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+              <form action="/choose" method="post" class="m-0">
+                <button type="submit" class="btn btn-outline-secondary js-choose">Pick another</button>
+              </form>
+              <button type="button" class="btn random-modal-primary" data-bs-dismiss="modal">Got it</button>
             </div>
           </div>
         </div>
       </div>
     {% endif %}
-    <div class="container mt-5">
-        <form action={{page}} method="post" name="options">
-            <div class="row justify-content-start">
-                <div class="col-4">
-                    <select class="form-select form-select-lg mb-3 grey " aria-label="Large select example" name="filter" onchange="this.form.submit()">
-                        <option selected>Filter by existence of...</option>
-                        <option value="series">Series</option>
-                        <option value="notes">Notes</option>
-                        <option value="genres">Genres</option>
-                    </select>  
+
+    <div class="container book-list-page mt-4" data-page-url="{{ page }}" data-next-page-num="{{ next_page_num or 2 }}" data-has-more="{{ '1' if has_more else '0' }}" data-loading="0" data-total-books="{{ total_books or 0 }}">
+        {% for msg in get_flashed_messages() %}
+        <div class="alert alert-info alert-dismissible fade show" role="alert">
+            {{msg}}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endfor %}
+
+        <h1 class="title mb-4">{{title}}</h1>
+
+        <div class="book-controls mb-3">
+            <div class="d-flex flex-column flex-md-row gap-3 align-items-start">
+                <div class="flex-grow-1">
+                    <label class="visually-hidden" for="bookPageSearch">Search {{ site_record_label_plural|lower }} on this page</label>
+                    <div class="d-flex gap-2 align-items-center">
+                        <input id="bookPageSearch" type="search" class="form-control book-page-search-input" placeholder="Search titles, notes, genres, or series..." autocomplete="off">
+                    </div>
+                    <div class="book-page-search-meta grey-text mt-2 sr-only" id="bookPageSearchMeta" aria-live="polite" data-default-help="Searches titles, notes, genres, and series on this page.">Searches titles, notes, genres, and series on this page.</div>
                 </div>
-                <div class="col-4">
-                    <button type="submit" name="clear" class="btn hidden-info">Clear filter</button>
+                <div class="d-flex align-items-center gap-2 ms-md-3">
+                    <div id="bulk-suggest-bar">
+                        <button type="button" class="btn btn-outline-secondary" id="bulk-suggest-btn">
+                            Suggest genres for all empty rows
+                            (<span id="bulk-suggest-empty-count">{{ bulk_suggest_count or 0 }}</span>)
+                        </button>
+                        <span id="bulk-suggest-status" class="grey-text ms-2" aria-live="polite"></span>
+                    </div>
                 </div>
-              </div>
-                   
-        </form>
-            
-        <div class="container text-center">
-            <table class="table">
+            </div>
+
+            <form action="{{page}}" method="post" name="options" class="book-list-filters mt-3">
+                <div class="row g-2 align-items-stretch">
+                    <div class="col-12 col-md">
+                        {% set existence_label = {'series': 'Series', 'notes': 'Notes', 'genres': 'Genres'}.get(selected_existence, '') %}
+                        <select class="form-select grey {% if selected_existence %}filter-active{% endif %}" name="filter" onchange="this.form.submit()" aria-label="Filter by existence of">
+                            <option value="">{% if existence_label %}Existence: {{ existence_label }}{% else %}Filter by existence of...{% endif %}</option>
+                            <option value="series" {% if selected_existence == "series" %}selected{% endif %}>Series</option>
+                            <option value="notes" {% if selected_existence == "notes" %}selected{% endif %}>Notes</option>
+                            <option value="genres" {% if selected_existence == "genres" %}selected{% endif %}>Genres</option>
+                        </select>
+                    </div>
+                    <div class="col-12 col-md">
+                        <select class="form-select grey {% if selected_status %}filter-active{% endif %}" name="status_filter" onchange="this.form.submit()" aria-label="Filter by status">
+                            <option value="">{% if selected_status %}Status: {{ selected_status }}{% else %}Filter by status...{% endif %}</option>
+                            {% for s in status_options %}
+                                <option value="{{s}}" {% if selected_status == s %}selected{% endif %}>{{s}}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% if page == "/completed" %}
+                    <div class="col-12 col-md">
+                        <select class="form-select grey {% if selected_reread %}filter-active{% endif %}" name="reread_filter" onchange="this.form.submit()" aria-label="Filter by rereads">
+                            <option value="">{% if selected_reread != "" %}Rereads: {{ selected_reread }}{% else %}Filter by rereads...{% endif %}</option>
+                            {% for n in reread_options %}
+                                <option value="{{n}}" {% if selected_reread == n|string %}selected{% endif %}>{{n}} reread{{ '' if n == 1 else 's' }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% endif %}
+                    <div class="col-12 col-md-auto">
+                        <button type="submit" name="clear" value="1" class="btn hidden-info clear-filter-btn w-100">Clear filter</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <div class="table-responsive-wrap">
+            <table class="table book-table align-middle">
                 <thead>
                     <tr>
-                        <th scope="col">{{ticked}}</th>
-                        <th scope="col">Name</th>
-                        <th scope="col">Status</th>
-                        <th scope="col">Date Added</th>
-                        <th scope="col"></th>
-                        <th scope="col">{{crossed}}</th>
+                        <th scope="col" class="col-action">{{ticked}}</th>
+                        <th scope="col" class="col-name">Name</th>
+                        <th scope="col" class="col-status">Status</th>
+                        <th scope="col" class="col-date">Date Added</th>
+                        <th scope="col" class="col-info">Info</th>
+                        <th scope="col" class="col-action">{{crossed}}</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {%for book in books%}
-                        {% set id = '#' ~ loop.index %}
-                        <tr class="align-middle pb-0">
-                            <td>
+                    {% for book in books %}
+                        {% set collapse_id = 'book-info-' ~ book.id %}
+                        <tr id="book-{{ book.id }}" class="book-row" data-book-id="{{ book.id }}" data-book-title="{{ book.book }}" data-needs-genres="{% if not book.genres or book.genres == 'None' %}1{% else %}0{% endif %}" data-search-text="{{ ((book.book or '') ~ ' ' ~ (book.status or '') ~ ' ' ~ (book.date or '') ~ ' ' ~ (book.genres or '') ~ ' ' ~ (book.series or '') ~ ' ' ~ (book.notes or '')) | lower }}">
+                            <td class="col-action">
                                 {% block checked scoped %}{% endblock %}
-                                
                             </td>
-                            <td>
-                                <div class="container text-center">
-                                    <div class="row justify-content-center ">
-                                        <div class="col-4 mt-2">
-                                            {{book.book}}
-                                        </div>
-                                        <div class="col-4">
-                                            <form action="/delete" method="post">
-                                                <button class="border-0 white" type="submit" name="book" value={{book.id}}>
-                                                    <img src="../static/delete.png" alt="delete" height="30" width="30">
-                                                </button>
-                                            </form>
-                                        </div>
-                                    </div>
-                                </div>
-                                
-                            </td>
-                            <td>{{book.status}}</td>
-                            <td>{{book.date}}</td>
-                            <td>
-                                <div class="row align-middle">
-                                    <div class="col ">
-                                        <button class="btn mt-4half mt-5 d-inline-flex " data-bs-toggle="collapse" data-bs-target= {{id}} aria-expanded="false" aria-controls="collapseWidthExample">
-                                            <img src="../static/more.png" alt="More Info" height="30" width="30" >
+                            <td class="col-name">
+                                <div class="book-name-cell">
+                                    <form action="/favorite/{{ page.lstrip('/') }}/{{ book.id }}" method="post" class="m-0">
+                                        <button type="submit" class="book-name-favorite {% if book.favorite %}is-favorite{% endif %}" aria-pressed="{{ 'true' if book.favorite else 'false' }}" aria-label="{% if book.favorite %}Unfavorite{% else %}Favorite{% endif %}" title="{% if book.favorite %}Unfavorite{% else %}Mark as favorite{% endif %}">
+                                            <span aria-hidden="true">{% if book.favorite %}★{% else %}☆{% endif %}</span>
                                         </button>
-                                    </div>
-                                    <div class="col d-inline-flex ">
-                                        <div style="min-height: 100px;">
-                                            <div class="collapse collapse-horizontal" id={{loop.index}}>
-                                                <div class="card card-body text-start" style="width: 300px;">
-                                                    <h6> Date added: <em>{{book.date}}</em></h6>
-                                                    <h6>Genres: <em>{{book.genres}}</em></h6>
-                                                    <h6> Notes: <em>{{book.notes}}</em></h6>
-                                                    <h6> Series: <em>{{book.series}}</em></h6>
-                                                    {% if book.reread is defined %}<h6> Reread <em>{{book.reread}} time(s)</em></h6>{% endif %}
-                                                    {% if book.days is defined %}<h6> Days taken to finish: <em>{{book.days}}</em></h6>{% endif %}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
+                                    </form>
+                                    <span class="book-name">{{book.book}}</span>
+                                    <form action="/delete" method="post" class="m-0">
+                                        <button class="book-name-delete" type="submit" name="book" value="{{book.id}}" aria-label="Delete">
+                                            <img src="../static/delete.png" alt="delete" height="22" width="22">
+                                        </button>
+                                    </form>
                                 </div>
                             </td>
-                            <td>
-                                {% block crossed scoped%}{% endblock %}     
+                            <td class="col-status">
+                                {% if book.status %}
+                                  <span class="book-status-badge">{{book.status}}</span>
+                                {% endif %}
+                            </td>
+                            <td class="col-date">
+                                <span class="book-date">{{book.date}}</span>
+                            </td>
+                            <td class="col-info">
+                                <button class="book-info-toggle js-book-toggle" type="button" data-target="book-info-{{ book.id }}" aria-expanded="false" aria-controls="book-info-{{ book.id }}">
+                                    <img src="../static/more.png" alt="More Info" height="26" width="26">
+                                </button>
+                            </td>
+                            <td class="col-action">
+                                {% block crossed scoped %}{% endblock %}
+                            </td>
+                        </tr>
+                        <tr class="book-info-row" id="{{collapse_id}}" hidden>
+                            <td colspan="6" class="book-info-cell">
+                                <div class="book-info-card">
+                                    <button type="button" class="book-info-edit-btn js-edit-toggle" aria-label="Edit book">✎ Edit</button>
+                                    <div class="book-info-display js-display">
+                                        <dl class="book-info-meta">
+                                            <div class="book-info-pair"><dt>Date added</dt><dd>{{book.date}}</dd></div>
+                                            <div class="book-info-pair"><dt>Status</dt><dd>{{book.status or "—"}}</dd></div>
+                                            <div class="book-info-pair"><dt>Genres</dt><dd>{{book.genres or "—"}}</dd></div>
+                                            <div class="book-info-pair"><dt>Series</dt><dd>{{book.series or "—"}}</dd></div>
+                                            {% if book.reread is defined %}<div class="book-info-pair"><dt>Rereads</dt><dd>{{book.reread}} time(s)</dd></div>{% endif %}
+                                            {% if book.days is defined %}<div class="book-info-pair"><dt>Days to finish</dt><dd>{{book.days}}</dd></div>{% endif %}
+                                        </dl>
+                                        <div class="book-info-notes">
+                                            <p class="book-info-notes-label">Notes</p>
+                                            <p class="book-info-notes-text">{{book.notes or "—"}}</p>
+                                        </div>
+                                    </div>
+                                    <form action="/update/{{ page.lstrip('/') }}/{{ book.id }}" method="post" class="book-info-edit js-edit" hidden>
+                                        <label class="book-edit-field">
+                                            <span class="book-edit-label">{{ site_record_label }} name</span>
+                                            <input type="text" name="book" value="{{ book.book }}" required>
+                                        </label>
+                                        <label class="book-edit-field">
+                                            <span class="book-edit-label">Status</span>
+                                            <input type="text" name="status" value="{{ book.status or '' }}" list="status-options-{{ book.id }}" placeholder="e.g. Finished">
+                                            <datalist id="status-options-{{ book.id }}">
+                                                {% for s in status_options %}<option value="{{ s }}">{% endfor %}
+                                            </datalist>
+                                        </label>
+                                        <label class="book-edit-field">
+                                            <span class="book-edit-label">Genres</span>
+                                            <div class="d-flex gap-2 align-items-stretch">
+                                                <input type="text" name="genres" value="{{ book.genres or '' }}" placeholder="Comma-separated genres" class="flex-grow-1">
+                                                <button type="button" class="btn btn-outline-secondary btn-sm js-suggest-genres">Suggest</button>
+                                            </div>
+                                        </label>
+                                        <label class="book-edit-field">
+                                            <span class="book-edit-label">Series</span>
+                                            <input type="text" name="series" value="{{ book.series or '' }}" placeholder="Series name">
+                                        </label>
+                                        {% if book.reread is defined %}
+                                        <label class="book-edit-field">
+                                            <span class="book-edit-label">Rereads</span>
+                                            <input type="number" name="reread" value="{{ book.reread }}" min="0" step="1" inputmode="numeric" required>
+                                        </label>
+                                        {% endif %}
+                                        <label class="book-edit-field">
+                                            <span class="book-edit-label">Notes</span>
+                                            <textarea name="notes" rows="3">{{ book.notes or '' }}</textarea>
+                                        </label>
+                                        <div class="book-edit-actions">
+                                            <button type="button" class="btn btn-outline-secondary js-edit-cancel">Cancel</button>
+                                            <button type="submit" class="btn random-modal-primary">Save</button>
+                                        </div>
+                                        <div class="book-edit-feedback book-save-status" aria-live="polite" hidden></div>
+                                    </form>
+                                </div>
                             </td>
                         </tr>
                     {% endfor %}
-                </table>
-            </div>
+                </tbody>
+            </table>
+        </div>
+
+        {% if total_books is defined and total_books > 0 %}
+        <div id="bookScrollSentinel" class="book-scroll-sentinel" aria-hidden="true"></div>
+        {% endif %}
+
+        {% if books|length == 0 %}
+            <p class="grey-text text-center my-5">No books yet — add one or import a file to get started.</p>
+        {% endif %}
+
+        <div class="choose-fab">
+            <form action="/choose" method="post">
+                <button type="submit" class="red border-0 btn js-choose">Choose a Book</button>
+            </form>
+        </div>
     </div>
-<form action="/choose" method="/post" >
-    <input id="choose" type="submit" class="red border-0 right me-5 mb-5 btn" value="Choose a Book"/>
-</form>
 
-  
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            function showInfoRow(infoRow) {
+                infoRow.hidden = false;
+                infoRow.dataset.open = "1";
+                const button = document.querySelector('.js-book-toggle[data-target="' + infoRow.id + '"]');
+                if (button) button.setAttribute("aria-expanded", "true");
+            }
+            function hideInfoRow(infoRow) {
+                infoRow.hidden = true;
+                infoRow.dataset.open = "0";
+                const button = document.querySelector('.js-book-toggle[data-target="' + infoRow.id + '"]');
+                if (button) button.setAttribute("aria-expanded", "false");
+            }
 
+            const bookPageSearch = document.getElementById("bookPageSearch");
+            const bookPageSearchMeta = document.getElementById("bookPageSearchMeta");
+            const booksPage = document.querySelector(".book-list-page");
+            const bookTableBody = document.querySelector(".book-table tbody");
+            const bookPaginationMeta = document.getElementById("bookPaginationMeta");
+            const bookPaginationLoading = document.getElementById("bookPaginationLoading");
+            const bookScrollSentinel = document.getElementById("bookScrollSentinel");
+            let bookLoadObserver = null;
+            let bulkSuggestRemaining = 0;
+            const bulkSuggestBatchSize = 10;
+
+            function getBookRows() {
+                return Array.from(document.querySelectorAll("tr.book-row"));
+            }
+
+            function linkifyNotes(value) {
+                if (value === undefined || value === null || value === "" || value === "None") {
+                    return "—";
+                }
+
+                const source = String(value);
+                const urlPattern = /(https?:\/\/[^\s<]+|www\.[^\s<]+)/gi;
+                const parts = [];
+                let lastIndex = 0;
+                let match;
+
+                while ((match = urlPattern.exec(source)) !== null) {
+                    const text = source.slice(lastIndex, match.index).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/'/g, "&#39;").replace(/\"/g, "&quot;").replace(/\n/g, "<br>");
+                    parts.push(text);
+                    const href = match[0].startsWith("www.") ? "https://" + match[0] : match[0];
+                    parts.push('<a href="' + encodeURI(href) + '" target="_blank" rel="noopener noreferrer">' + match[0].replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/'/g, "&#39;").replace(/\"/g, "&quot;") + '</a>');
+                    lastIndex = match.index + match[0].length;
+                }
+
+                parts.push(source.slice(lastIndex).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/'/g, "&#39;").replace(/\"/g, "&quot;").replace(/\n/g, "<br>"));
+                return parts.join("") || "—";
+            }
+
+            const randomNotes = document.querySelector(".random-modal-notes-text");
+            if (randomNotes) {
+                randomNotes.innerHTML = linkifyNotes(randomNotes.textContent || randomNotes.innerText || "");
+            }
+
+            function refreshBulkSuggestCount() {
+                const countEl = document.getElementById("bulk-suggest-empty-count");
+                if (!countEl) return;
+                countEl.textContent = String(Math.max(0, bulkSuggestRemaining));
+            }
+
+            function decrementBulkSuggestCount() {
+                bulkSuggestRemaining = Math.max(0, bulkSuggestRemaining - 1);
+                refreshBulkSuggestCount();
+            }
+
+            function updateSearchMeta(visibleCount, query) {
+                if (!bookPageSearchMeta) return;
+                if (!query) {
+                    bookPageSearchMeta.textContent = bookPageSearchMeta.dataset.defaultHelp || "";
+                    return;
+                }
+                bookPageSearchMeta.textContent = visibleCount + " match" + (visibleCount === 1 ? "" : "es") + " on this page";
+            }
+
+            function applyPageSearch() {
+                if (!bookPageSearch) return;
+                const query = (bookPageSearch.value || "").trim().toLowerCase();
+                let visibleCount = 0;
+                getBookRows().forEach(function (row) {
+                    const infoRow = document.getElementById("book-info-" + row.dataset.bookId);
+                    const haystack = row.dataset.searchText || "";
+                    const match = !query || haystack.includes(query);
+                    row.hidden = !match;
+                    if (infoRow) {
+                        if (!match) {
+                            infoRow.hidden = true;
+                        } else {
+                            infoRow.hidden = infoRow.dataset.open !== "1";
+                        }
+                    }
+                    if (match) visibleCount++;
+                });
+                updateSearchMeta(visibleCount, query);
+            }
+
+            if (bookPageSearch) {
+                bookPageSearch.addEventListener("input", applyPageSearch);
+                applyPageSearch();
+            }
+
+            const bulkSuggestCountEl = document.getElementById("bulk-suggest-empty-count");
+            if (bulkSuggestCountEl) {
+                bulkSuggestRemaining = parseInt(bulkSuggestCountEl.textContent || "0", 10) || 0;
+                refreshBulkSuggestCount();
+            }
+
+            document.addEventListener("click", function (event) {
+                const toggleBtn = event.target.closest(".js-book-toggle");
+                if (toggleBtn) {
+                    const target = document.getElementById(toggleBtn.dataset.target);
+                    if (!target) return;
+                    if (target.hidden) showInfoRow(target);
+                    else hideInfoRow(target);
+                    return;
+                }
+
+                const editToggleBtn = event.target.closest(".js-edit-toggle");
+                if (editToggleBtn) {
+                    const card = editToggleBtn.closest(".book-info-card");
+                    if (!card) return;
+                    card.querySelector(".js-display").hidden = true;
+                    card.querySelector(".js-edit").hidden = false;
+                    editToggleBtn.hidden = true;
+                    return;
+                }
+
+                const editCancelBtn = event.target.closest(".js-edit-cancel");
+                if (editCancelBtn) {
+                    const card = editCancelBtn.closest(".book-info-card");
+                    if (!card) return;
+                    card.querySelector(".js-display").hidden = false;
+                    card.querySelector(".js-edit").hidden = true;
+                    const toggle = card.querySelector(".js-edit-toggle");
+                    if (toggle) toggle.hidden = false;
+                    return;
+                }
+
+                const suggestBtn = event.target.closest(".js-suggest-genres");
+                if (suggestBtn) {
+                    const form = suggestBtn.closest("form");
+                    if (!form) return;
+                    const titleInput = form.querySelector('[name="book"]');
+                    const genresInput = form.querySelector('[name="genres"]');
+                    if (!titleInput || !genresInput) return;
+                    const title = (titleInput.value || "").trim();
+                    if (!title) { titleInput.focus(); return; }
+                    const originalLabel = suggestBtn.textContent;
+                    const originalPlaceholder = genresInput.placeholder;
+                    suggestBtn.disabled = true;
+                    suggestBtn.textContent = "…";
+                    (async function () {
+                        try {
+                            const response = await fetch("/api/infer_genres", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ title: title }),
+                            });
+                            if (!response.ok) throw new Error("HTTP " + response.status);
+                            const data = await response.json();
+                            const genres = (data.suggestions || [])
+                                .map(function (s) { return s.genre; })
+                                .filter(Boolean);
+                            if (genres.length) {
+                                genresInput.value = genres.join(", ");
+                                decrementBulkSuggestCount();
+                            } else {
+                                genresInput.placeholder = "No suggestions found";
+                                setTimeout(function () { genresInput.placeholder = originalPlaceholder; }, 3000);
+                            }
+                        } catch (err) {
+                            genresInput.placeholder = "Suggestion failed — try again";
+                            setTimeout(function () { genresInput.placeholder = originalPlaceholder; }, 3000);
+                        } finally {
+                            suggestBtn.disabled = false;
+                            suggestBtn.textContent = originalLabel;
+                        }
+                    })();
+                }
+            });
+
+            document.addEventListener("submit", async function (event) {
+                const form = event.target;
+                if (!form.matches("form.book-info-edit")) return;
+                event.preventDefault();
+                const card = form.closest(".book-info-card");
+                const submitButton = form.querySelector('button[type="submit"]');
+                if (submitButton) {
+                    submitButton.disabled = true;
+                    submitButton.dataset.originalLabel = submitButton.textContent;
+                    submitButton.textContent = "Saving…";
+                }
+                try {
+                    const response = await fetch(form.action, {
+                        method: "POST",
+                        headers: { "X-Requested-With": "XMLHttpRequest" },
+                        body: new FormData(form),
+                    });
+                    const data = await response.json();
+                    if (!response.ok) {
+                        throw new Error(data.error || "Save failed.");
+                    }
+                    syncBookCard(card, data);
+                } catch (err) {
+                    window.alert(err.message || "Save failed.");
+                } finally {
+                    if (submitButton) {
+                        submitButton.disabled = false;
+                        submitButton.textContent = submitButton.dataset.originalLabel || "Save";
+                    }
+                }
+            });
+
+            async function loadNextBooksPage() {
+                if (!booksPage || !bookTableBody) return;
+                if (booksPage.dataset.loading === "1" || booksPage.dataset.hasMore !== "1") return;
+                const nextPageNum = parseInt(booksPage.dataset.nextPageNum || "0", 10);
+                if (!nextPageNum) return;
+
+                booksPage.dataset.loading = "1";
+                if (bookPaginationLoading) bookPaginationLoading.hidden = false;
+
+                try {
+                    const nextUrl = new URL(window.location.href);
+                    nextUrl.searchParams.set("page_num", String(nextPageNum));
+                    const response = await fetch(nextUrl.toString(), {
+                        headers: { "X-Requested-With": "XMLHttpRequest" },
+                    });
+                    if (!response.ok) throw new Error("HTTP " + response.status);
+                    const html = await response.text();
+                    const doc = new DOMParser().parseFromString(html, "text/html");
+                    const nextBody = doc.querySelector(".book-table tbody");
+                    if (nextBody) {
+                        Array.from(nextBody.children).forEach(function (row) {
+                            bookTableBody.appendChild(document.importNode(row, true));
+                        });
+                    }
+
+                    const nextPage = doc.querySelector(".book-list-page");
+                    if (nextPage && booksPage) {
+                        booksPage.dataset.nextPageNum = nextPage.dataset.nextPageNum || String(nextPageNum + 1);
+                        booksPage.dataset.hasMore = nextPage.dataset.hasMore || "0";
+                        booksPage.dataset.totalBooks = nextPage.dataset.totalBooks || booksPage.dataset.totalBooks || "0";
+                        const nextMeta = doc.getElementById("bookPaginationMeta");
+                        if (nextMeta && bookPaginationMeta) {
+                            bookPaginationMeta.textContent = nextMeta.textContent || bookPaginationMeta.textContent;
+                        } else if (bookPaginationMeta) {
+                            const totalBooks = parseInt(booksPage.dataset.totalBooks || "0", 10);
+                            bookPaginationMeta.textContent = "Showing " + getBookRows().length + " of " + totalBooks + " books";
+                        }
+                    }
+
+                    applyPageSearch();
+                    refreshBulkSuggestCount();
+
+                    if (booksPage.dataset.hasMore !== "1" && bookLoadObserver) {
+                        bookLoadObserver.disconnect();
+                    }
+                } catch (err) {
+                    console.error("Failed to load more books:", err);
+                } finally {
+                    booksPage.dataset.loading = "0";
+                    if (bookPaginationLoading) bookPaginationLoading.hidden = true;
+                }
+            }
+
+            if (bookScrollSentinel && "IntersectionObserver" in window && booksPage && booksPage.dataset.hasMore === "1") {
+                bookLoadObserver = new IntersectionObserver(function (entries) {
+                    entries.forEach(function (entry) {
+                        if (entry.isIntersecting) {
+                            loadNextBooksPage();
+                        }
+                    });
+                }, { rootMargin: "900px 0px" });
+                bookLoadObserver.observe(bookScrollSentinel);
+            }
+
+            const hash = window.location.hash;
+            if (hash && hash.startsWith("#book-")) {
+                const row = document.querySelector(hash);
+                if (row) {
+                    const bookId = hash.slice("#book-".length);
+                    const infoRow = document.getElementById("book-info-" + bookId);
+                    if (infoRow) showInfoRow(infoRow);
+                    requestAnimationFrame(function () {
+                        const nav = document.querySelector(".main-nav");
+                        const navOffset = nav ? nav.offsetHeight : 0;
+                        const rowTop = row.getBoundingClientRect().top + window.scrollY;
+                        const target = Math.max(0, rowTop - navOffset - 16);
+                        window.scrollTo({ top: target, behavior: "smooth" });
+                        row.classList.add("book-flash");
+                        setTimeout(function () { row.classList.remove("book-flash"); }, 2600);
+                    });
+                }
+            }
+
+            function syncBookCard(card, data) {
+                if (!card || !data) return;
+                const infoRow = card.closest(".book-info-row");
+                const summaryRow = infoRow ? infoRow.previousElementSibling : null;
+                const feedbackEl = card.querySelector(".book-edit-feedback");
+
+                if (summaryRow) {
+                    const nameEl = summaryRow.querySelector(".book-name");
+                    if (nameEl) nameEl.textContent = data.book || "";
+                    summaryRow.dataset.bookTitle = data.book || "";
+
+                    const dateEl = summaryRow.querySelector(".book-date");
+                    if (dateEl) dateEl.textContent = data.date || "—";
+
+                    const statusBadge = summaryRow.querySelector(".book-status-badge");
+                    if (statusBadge) {
+                        if (data.status) {
+                            statusBadge.hidden = false;
+                            statusBadge.textContent = data.status;
+                        } else {
+                            statusBadge.hidden = true;
+                        }
+                    }
+                }
+
+                card.querySelectorAll(".book-info-pair").forEach(function (pair) {
+                    const dt = pair.querySelector("dt");
+                    const dd = pair.querySelector("dd");
+                    if (!dt || !dd) return;
+                    const label = (dt.textContent || "").trim();
+                    if (label === "Date added") {
+                        dd.textContent = data.date || "—";
+                    } else if (label === "Status") {
+                        dd.textContent = data.status || "—";
+                    } else if (label === "Genres") {
+                        dd.textContent = data.genres || "—";
+                    } else if (label === "Series") {
+                        dd.textContent = data.series || "—";
+                    } else if (label === "Rereads") {
+                        if (data.reread !== undefined) {
+                            pair.hidden = false;
+                            dd.textContent = data.reread + " time(s)";
+                        } else {
+                            pair.hidden = true;
+                        }
+                    } else if (label === "Days to finish") {
+                        if (data.days !== undefined) {
+                            pair.hidden = false;
+                            dd.textContent = data.days;
+                        } else {
+                            pair.hidden = true;
+                        }
+                    }
+                });
+
+                const notesText = card.querySelector(".book-info-notes-text");
+                if (notesText) {
+                    notesText.innerHTML = linkifyNotes(data.notes);
+                }
+
+                const editForm = card.querySelector("form.book-info-edit");
+                if (editForm) {
+                    editForm.querySelector('[name="book"]').value = data.book || "";
+                    editForm.querySelector('[name="status"]').value = data.status || "";
+                    editForm.querySelector('[name="genres"]').value = data.genres || "";
+                    editForm.querySelector('[name="series"]').value = data.series || "";
+                    const notesField = editForm.querySelector('[name="notes"]');
+                    if (notesField) notesField.value = data.notes || "";
+                    const rereadField = editForm.querySelector('[name="reread"]');
+                    if (rereadField) rereadField.value = data.reread !== undefined ? data.reread : "";
+                }
+
+                card.querySelector(".js-display").hidden = false;
+                card.querySelector(".js-edit").hidden = true;
+                const toggle = card.querySelector(".js-edit-toggle");
+                if (toggle) toggle.hidden = false;
+
+                if (feedbackEl) {
+                    feedbackEl.textContent = "Saved";
+                    feedbackEl.hidden = false;
+                    feedbackEl.classList.add("is-visible");
+                    if (feedbackEl._hideTimer) {
+                        clearTimeout(feedbackEl._hideTimer);
+                    }
+                    feedbackEl._hideTimer = setTimeout(function () {
+                        feedbackEl.classList.remove("is-visible");
+                        feedbackEl.hidden = true;
+                        feedbackEl.textContent = "";
+                        feedbackEl._hideTimer = null;
+                    }, 1800);
+                }
+            }
+
+            // Bulk: suggest genres for every row whose genres column is empty.
+            (function setupBulkSuggest() {
+                const bulkBtn = document.getElementById("bulk-suggest-btn");
+                const statusEl = document.getElementById("bulk-suggest-status");
+                const countEl = document.getElementById("bulk-suggest-empty-count");
+                if (!bulkBtn || !statusEl || !countEl) return;
+
+                const page = {{ page | tojson }};
+                const category = page.replace(/^\//, "");
+                let cancelRequested = false;
+                let running = false;
+                let controller = null;
+                let totalUpdated = 0;
+                let totalSkipped = 0;
+                let totalToProcess = 0;
+
+                function refreshCount() {
+                    countEl.textContent = String(Math.max(0, bulkSuggestRemaining));
+                }
+                refreshCount();
+
+                function setIdleState() {
+                    bulkBtn.disabled = false;
+                    bulkBtn.textContent = "Suggest genres for all empty rows";
+                    running = false;
+                    controller = null;
+                }
+
+                function setRunningState() {
+                    bulkBtn.disabled = false;
+                    bulkBtn.textContent = "Cancel";
+                    running = true;
+                }
+
+                bulkBtn.addEventListener("click", async function () {
+                    if (running) {
+                        cancelRequested = true;
+                        statusEl.textContent = "Cancelling after the current request…";
+                        if (controller) controller.abort();
+                        return;
+                    }
+
+                    cancelRequested = false;
+                    totalUpdated = 0;
+                    totalSkipped = 0;
+                    totalToProcess = bulkSuggestRemaining;
+                    setRunningState();
+                    statusEl.textContent = "Inferring genres…";
+
+                    try {
+                        while (!cancelRequested && bulkSuggestRemaining > 0) {
+                            controller = new AbortController();
+                            const response = await fetch("/api/bulk_suggest_genres/" + category, {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ batch_size: bulkSuggestBatchSize }),
+                                signal: controller.signal,
+                            });
+                            controller = null;
+                            if (!response.ok) throw new Error("HTTP " + response.status);
+                            const data = await response.json();
+                            const books = data.books || [];
+
+                            // Patch any rows currently in the DOM (lazy-load may have not pulled all yet).
+                            books.forEach(function (book) {
+                                const row = document.querySelector('tr.book-row[data-book-id="' + book.id + '"]');
+                                if (!row) return;
+                                row.querySelectorAll('.book-info-pair').forEach(function (pair) {
+                                    const dt = pair.querySelector('dt');
+                                    if (dt && dt.textContent.trim() === "Genres") {
+                                        const dd = pair.querySelector('dd');
+                                        if (dd) dd.textContent = book.genres;
+                                    }
+                                });
+                                const editInput = row.querySelector('form.book-info-edit [name="genres"]');
+                                if (editInput) editInput.value = book.genres;
+                                row.dataset.needsGenres = "0";
+                            });
+
+                            totalUpdated += data.updated || 0;
+                            totalSkipped += data.skipped || 0;
+                            if (typeof data.remaining === "number") {
+                                bulkSuggestRemaining = Math.max(0, data.remaining);
+                            } else {
+                                bulkSuggestRemaining = Math.max(0, bulkSuggestRemaining - (data.updated || 0));
+                            }
+                            refreshCount();
+
+                            if (cancelRequested) break;
+                            if (bulkSuggestRemaining > 0) {
+                                const totalChecked = totalUpdated + totalSkipped;
+                                statusEl.textContent = "Progress: " + totalChecked + " / " + totalToProcess + " checked, " + totalUpdated + " updated, " + totalSkipped + " skipped, " + bulkSuggestRemaining + " left…";
+                            }
+                        }
+
+                        if (cancelRequested) {
+                            const totalChecked = totalUpdated + totalSkipped;
+                            statusEl.textContent = "Cancelled. " + totalChecked + " / " + totalToProcess + " checked, " + totalUpdated + " updated, " + totalSkipped + " skipped, " + bulkSuggestRemaining + " left.";
+                        } else {
+                            const totalChecked = totalUpdated + totalSkipped;
+                            statusEl.textContent = "Done. " + totalChecked + " checked, " + totalUpdated + " updated, " + totalSkipped + " skipped.";
+                        }
+                    } catch (err) {
+                        if (err && err.name === "AbortError") {
+                            const totalChecked = totalUpdated + totalSkipped;
+                            statusEl.textContent = "Cancelled. " + totalChecked + " / " + totalToProcess + " checked, " + totalUpdated + " updated, " + totalSkipped + " skipped, " + bulkSuggestRemaining + " left.";
+                        } else {
+                            statusEl.textContent = "Suggestion failed: " + (err.message || err);
+                        }
+                    } finally {
+                        setIdleState();
+                    }
+                });
+            })();
+        });
+    </script>
 {% endblock %}

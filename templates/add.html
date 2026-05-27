@@ -1,69 +1,126 @@
 {% extends "layout.html" %}
 
 {% block title %}
-    Add Books
+    Add {{ site_record_label_plural }}
 {% endblock %}
 
 {% block main %}
 <div class="container">
-    
-</form>
-    {% for msg in get_flashed_messages()  %}
-    {% if msg == 'Add Book Success!' %}
-        <div class="alert alert-success alert-dismissible fade show" role="alert">
-            <h6>{{msg}}</h6>
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </button>
-        </div>
-    {% else %}
-        <div class="alert alert-warning alert-dismissible fade show" role="alert">
-            <h6>{{msg}}</h6>
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-            </button>
-        </div>
-    {% endif %}
+    {% for msg in get_flashed_messages() %}
+        {% if msg == 'Add ' ~ site_record_label ~ ' Success!' %}
+            <div class="alert alert-success alert-dismissible fade show mt-3" role="alert">
+                {{msg}}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        {% else %}
+            <div class="alert alert-warning alert-dismissible fade show mt-3" role="alert">
+                {{msg}}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            </div>
+        {% endif %}
     {% endfor %}
-
 </div>
-<form action="/add" method="post" class="middle mt-5">
+
+<form action="/add" method="post" class="form-panel form-panel-wide">
     <h3 class="mb-3"><u>Mandatory Fields</u></h3>
     <div class="input-group mb-3">
-        <span class="input-group-text" id="inputGroup-sizing-default">Name of Book</span>
-        <input type="text" class="form-control" aria-label="Sizing example input" aria-describedby="inputGroup-sizing-default" name="book" placeholder="Name of Book"/>
+        <span class="input-group-text">Name of {{ site_record_label }}</span>
+        <input type="text" class="form-control" name="book" id="book-input" placeholder="Name of {{ site_record_label }}"/>
     </div>
     <div class="input-group mb-3">
-        <span class="input-group-text" id="inputGroup-sizing-default">Destination</span>
-        <select name="destination" class="form-select" aria-label="Default select example">
-            <option selected>Select page</option>
+        <span class="input-group-text">Category</span>
+        <select name="category" class="form-select" required>
+            <option value="" selected>Select a category</option>
             <option value="completed">Completed</option>
             <option value="unfinished">Unfinished</option>
-            <option value="tbr">To Be Read</option>
-          </select>
+            <option value="tbr">{{ site_tbr_label }}</option>
+        </select>
     </div>
     <div class="input-group mb-3">
-        <span class="input-group-text" id="inputGroup-sizing-default">Status of Book</span>
-        <input name="status" class="form-control" list="datalistOptions" id="exampleDataList" placeholder="Type to search...">
+        <span class="input-group-text">Status</span>
+        <input name="status" class="form-control" list="datalistOptions" placeholder="Type or pick a status...">
         <datalist id="datalistOptions">
-            <option value="Finished">
-            <option value="Left Extras">
-            <option value="Finishing Soon">
-            <option value="Uncompleted">
+            {% if site_mode == "shows" %}
+                <option value="Completed">
+                <option value="Watching">
+                <option value="On Hold">
+                <option value="Dropped">
+                <option value="Plan to Watch">
+            {% else %}
+                <option value="Finished">
+                <option value="Left Extras">
+                <option value="Finishing Soon">
+                <option value="Uncompleted">
+            {% endif %}
         </datalist>
     </div>
-    <h3 class="mb-3"><u>Optional Fields</u></h3>
+
+    <h3 class="mb-3 mt-4"><u>Optional Fields</u></h3>
     <div class="input-group mb-3">
-        <span class="input-group-text" id="inputGroup-sizing-default" >Genre</span>
-        <input type="text" class="form-control" aria-label="Sizing example input" aria-describedby="inputGroup-sizing-default" name="genres" placeholder='Input a list of comma separated genres'/>
+        <span class="input-group-text">Genre</span>
+        <input type="text" class="form-control" name="genres" id="genres-input" placeholder='Comma-separated genres'/>
+        <button type="button" class="btn btn-outline-secondary" id="suggest-genres-btn">Suggest</button>
     </div>
     <div class="input-group mb-3">
-        <span class="input-group-text">Notes </span>
-        <textarea class="form-control" aria-label="With textarea" name="notes" placeholder="Reasons for reading, anticipation level, prominent plot points, possible deterrences, etc..."></textarea>
+        <span class="input-group-text">Notes</span>
+        <textarea class="form-control" name="notes" rows="3" placeholder="Reasons for reading, anticipation level, plot points, deterrences, etc..."></textarea>
     </div>
     <div class="input-group mb-3">
-        <span class="input-group-text" id="inputGroup-sizing-default" >Series Name</span>
-        <input type="text" class="form-control" aria-label="Sizing example input" aria-describedby="inputGroup-sizing-default" name="series" placeholder='Fill in if book added is part of a series'/>
+        <span class="input-group-text">Series Name</span>
+        <input type="text" class="form-control" name="series" placeholder='Fill in if the {{ site_record_label|lower }} is part of a series'/>
     </div>
-    <button class="btn grey right" type="submit">Add Book</button>
-</form>    
+
+    <div class="form-actions justify-content-between">
+        <a class="btn btn-outline-secondary" href="/import">Import from file…</a>
+        <button class="btn grey" type="submit">Add {{ site_record_label }}</button>
+    </div>
+</form>
+
+<script>
+(function () {
+    const btn = document.getElementById("suggest-genres-btn");
+    const titleInput = document.getElementById("book-input");
+    const genresInput = document.getElementById("genres-input");
+    if (!btn || !titleInput || !genresInput) return;
+
+    btn.addEventListener("click", async function () {
+        const title = (titleInput.value || "").trim();
+        if (!title) {
+            titleInput.focus();
+            return;
+        }
+        const originalLabel = btn.textContent;
+        const originalPlaceholder = genresInput.placeholder;
+        btn.disabled = true;
+        btn.textContent = "Suggesting…";
+        try {
+            const response = await fetch("/api/infer_genres", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ title: title }),
+            });
+            if (!response.ok) {
+                throw new Error("HTTP " + response.status);
+            }
+            const data = await response.json();
+            const genres = (data.suggestions || [])
+                .map(function (s) { return s.genre; })
+                .filter(Boolean);
+            if (genres.length) {
+                genresInput.value = genres.join(", ");
+            } else {
+                genresInput.placeholder = "No suggestions found";
+                setTimeout(function () { genresInput.placeholder = originalPlaceholder; }, 3000);
+            }
+        } catch (err) {
+            genresInput.placeholder = "Suggestion failed — try again";
+            setTimeout(function () { genresInput.placeholder = originalPlaceholder; }, 3000);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = originalLabel;
+        }
+    });
+})();
+</script>
 
 {% endblock %}

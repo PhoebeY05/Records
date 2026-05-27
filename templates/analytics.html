@@ -1,0 +1,137 @@
+{% extends "layout.html" %}
+
+{% block title %}
+    Analytics
+{% endblock %}
+
+{% block main %}
+<div class="container book-list-page mt-4 analytics-page">
+    <h1 class="title mb-2">Analytics</h1>
+    <p class="analytics-subtitle mb-4">A quick, user-friendly snapshot of your library.</p>
+
+    {% if stats.totals.all == 0 %}
+        <div class="alert alert-info" role="alert">
+            <strong>Nothing to analyse yet.</strong>
+            Add {{ site_record_label_plural|lower }} to your library and mark some as completed to see statistics here.
+        </div>
+    {% else %}
+        <section class="analytics-section analytics-overview">
+            <h2 class="analytics-section-title">Key stats</h2>
+            <div class="analytics-stat-grid">
+                <div class="analytics-stat-card">
+                    <div class="analytics-stat-value">{{ stats.totals.all }}</div>
+                    <div class="analytics-stat-label">{{ site_record_label_plural }} in library</div>
+                </div>
+                <div class="analytics-stat-card analytics-stat-card-accent">
+                    <div class="analytics-stat-value">{{ stats.ratios.completion_rate }}%</div>
+                    <div class="analytics-stat-label">
+                        Completion rate
+                    </div>
+                </div>
+                <div class="analytics-stat-card">
+                    <div class="analytics-stat-value">
+                        {% if stats.pace.avg_days is not none %}
+                            {{ stats.pace.avg_days }}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </div>
+                    <div class="analytics-stat-label">
+                        Avg days per {{ site_record_label|lower }}
+                        {% if stats.pace.avg_days is none %}
+                            <span class="analytics-stat-sublabel">Not enough completed {{ site_record_label_plural|lower }} yet</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="analytics-stat-card">
+                    <div class="analytics-stat-value">{{ stats.totals.distinct_genres }}</div>
+                    <div class="analytics-stat-label">Distinct genres</div>
+                </div>
+                <div class="analytics-stat-card">
+                    <div class="analytics-stat-value">{{ stats.totals.distinct_series }}</div>
+                    <div class="analytics-stat-label">Series followed</div>
+                </div>
+                <div class="analytics-stat-card">
+                    <div class="analytics-stat-value">{{ stats.totals.rereads_total }}</div>
+                    <div class="analytics-stat-label">
+                        Rereads
+                        {% if stats.totals.reread_books %}
+                            <span class="analytics-stat-sublabel">Across {{ stats.totals.reread_books }} {{ site_record_label|lower if stats.totals.reread_books == 1 else site_record_label_plural|lower }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            <p class="analytics-note mt-3 mb-0">
+                These stats focus on the signals that are easiest to act on: how much you have read, how fast, and what patterns show up most often.
+            </p>
+        </section>
+
+        <section class="analytics-section">
+            <div class="analytics-report-card">
+                <div>
+                    <h2 class="analytics-section-title mb-2">Need the full report?</h2>
+                    <p class="analytics-note mb-0">
+                        Open the detailed PDF report for the complete set of charts, yearly trends, library mix, and history.
+                    </p>
+                </div>
+                <div class="analytics-report-actions">
+                    <a class="btn random-modal-primary analytics-report-button" href="/analytics/details" target="_blank" rel="noopener noreferrer">Open detailed PDF report</a>
+                    <p class="analytics-report-hint mb-0">Opens in a new tab as a printable PDF</p>
+                </div>
+            </div>
+        </section>
+
+        {% if stats.top_genres %}
+        <section class="analytics-section">
+            <h2 class="analytics-section-title">Top genres</h2>
+            <p class="analytics-note mb-3">
+                Your completed {{ site_record_label_plural|lower }} lean toward these genres.
+            </p>
+            <ul class="analytics-bar-list">
+                {% for g in stats.top_genres[:5] %}
+                    <li class="analytics-bar-row">
+                        <span class="analytics-bar-label analytics-bar-label-wide">{{ g.genre }}</span>
+                        <div class="analytics-bar-track">
+                            <div class="analytics-bar-fill analytics-bar-fill-accent"
+                                 style="width: {{ g.bar_percent }}%;"></div>
+                        </div>
+                        <span class="analytics-bar-count">{{ g.count }}</span>
+                        <span class="analytics-bar-percent">{{ g.percent }}%</span>
+                    </li>
+                {% endfor %}
+            </ul>
+        </section>
+        {% endif %}
+
+        {% if stats.pace.avg_days is not none %}
+        <section class="analytics-section">
+            <h2 class="analytics-section-title">Pace</h2>
+            <div class="analytics-pace-grid">
+                <div class="analytics-pace-card">
+                    <div class="analytics-pace-value">{{ stats.pace.median_days }}</div>
+                    <div class="analytics-pace-label">Median days per {{ site_record_label|lower }}</div>
+                </div>
+                {% if stats.pace.fastest %}
+                <div class="analytics-pace-card">
+                    <div class="analytics-pace-value">{{ stats.pace.fastest.days }}d</div>
+                    <div class="analytics-pace-label">
+                        Fastest finish
+                        <span class="analytics-pace-sublabel">{{ stats.pace.fastest.book }}</span>
+                    </div>
+                </div>
+                {% endif %}
+                {% if stats.pace.slowest %}
+                <div class="analytics-pace-card">
+                    <div class="analytics-pace-value">{{ stats.pace.slowest.days }}d</div>
+                    <div class="analytics-pace-label">
+                        Longest finish
+                        <span class="analytics-pace-sublabel">{{ stats.pace.slowest.book }}</span>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </section>
+        {% endif %}
+    {% endif %}
+</div>
+{% endblock %}

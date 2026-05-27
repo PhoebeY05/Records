@@ -1,80 +1,39 @@
-<!DOCTYPE html>
+{% extends "layout.html" %}
 
-<html lang="en">
-    <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
-        <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js" integrity="sha384-I7E8VVD/ismYTF4hNIPjVp/Zjvgyol6VFvRkX/vR+Vc4jQkC+hVqc2pM8ODewa9r" crossorigin="anonymous"></script>
-        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.min.js" integrity="sha384-0pUGZvbkm6XF6gxjEnlmuGrJXVbNuzT9qBBavbLwCsOGabYfZo0T0to5eqruptLy" crossorigin="anonymous"></script>
-        <script src="https://code.jquery.com/jquery-1.12.0.js"></script>
-        <link href="../static/styles.css" rel="stylesheet">
-        <title>Search Results</title>
-        <script>
-            $(function () {
-             $('[data-bs-toggle="tooltip"]').tooltip()
-            });
-        </script>
-    </head>
-    <body class="platinum">
-        <div >
-            <div class="row grey">
-                <div class="col">
-                    <form action=""/home>
-                        <button class = "btn btn-outline-light red back corner-left georgia" type="submit">Back to Home</button>
-                    </form>
-                </div>
-                <div class="col-6">
-                    <h1 class="mt-3 header">Search Results For: <em>"{{search}}"</em></h1>
-                </div>
-                <div class="col col-lg-2">
-                </div>
-            </div>
-        </div>
-        <div class="container">
-            <div class="row text-center">
-                <div class="col-sm ">
-                    <h1 class="title">Book</h1>
-                </div>
-                <div class="col-sm">
-                    <h1 class="title">Date Added</h1>
-                </div>
-                <div class="col-sm">
-                    <h1 class="title">Status</h1>
-                </div>
-            </div>
-            <hr>
+{% block title %}Search Results{% endblock %}
+
+{% block main %}
+<div class="search-hero">
+    <div class="container d-flex flex-wrap align-items-center gap-3">
+        <form action="/home" class="m-0">
+            <button class="btn btn-outline-light georgia" type="submit">Back to Home</button>
+        </form>
+        <h1 class="ms-md-3">Search Results for: <em>"{{search}}"</em></h1>
+    </div>
+</div>
+
+<div class="container pb-5">
+    {% if results|length == 0 %}
+        <p class="grey-text text-center my-5">No matching {{ site_record_label_plural|lower }} found.</p>
+    {% else %}
+        <div class="search-grid">
             {% for book in results %}
-                {% if book.status == "completed" %}
-                    {% set link = "/completed" %}
-                    <!-- {% set message = "Go to `Completed`" %} -->
-                {% elif book.status == "unfinished" %}
-                    {% set link = "/unfinished" %}
-                    <!-- {% set message = "Go to `Unfinished`" %} -->
-                {% elif book.status == "tbr" %}
-                    {% set link = "/tbr" %}
-                    <!-- {% set message = "Go to `To Be Read` " %} -->
+                {% if book.category == "completed" %}
+                    {% set category_label = "Completed" %}
+                {% elif book.category == "unfinished" %}
+                    {% set category_label = "Unfinished" %}
+                {% elif book.category == "tbr" %}
+                    {% set category_label = site_tbr_label %}
+                {% else %}
+                    {% set category_label = book.category %}
                 {% endif %}
-                <div class="row text-center purple-text">
-                    <div class="col-sm">
-                        <div class="row justify-content-start">
-                            <div class="col-4 pb-5">
-                                <img src="../static/book.png" height=50, width="50" class="right"/>
-                            </div>
-                            <div class="col-4 ">
-                                <h5><a href={{link}} class="purple-text" data-bs-toggle="tooltip" data-bs-title= {{book.status}}>{{book.book}}</a></h5>
-                            </div>
-                          </div>
-                    </div>
-                    <div class="col-sm">
-                        <h5 class="purple-text">{{book.date}}</h5>
-                    </div>
-                    <div class="col-sm">
-                        <h5>{{book.status}}</h5>
-                    </div>
-                </div>
-                <br>
-            {% endfor %} 
+                <a class="search-card text-decoration-none" href="#" data-book-link data-category="{{ book.category }}" data-book-id="{{ book.id }}">
+                    <span class="search-status series-book-category series-book-category-{{ book.category }}">{{ category_label }}</span>
+                    <h5 class="search-title">{{ book.book }}</h5>
+                    <p class="search-meta mb-0">Added {{ book.date }}{% if book.status %} · Status: {{ book.status }}{% endif %}</p>
+                </a>
+            {% endfor %}
         </div>
-          
-    </body>
-</html>
+    {% endif %}
+</div>
+{% endblock %}

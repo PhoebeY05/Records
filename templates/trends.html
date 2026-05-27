@@ -1,0 +1,498 @@
+{% extends "layout.html" %}
+
+{% block title %}
+    Genre Trends
+{% endblock %}
+
+{% block main %}
+<div class="container book-list-page mt-4">
+    <nav aria-label="breadcrumb" class="trends-breadcrumb">
+        <a href="/genres">← Back to Genres</a>
+    </nav>
+    <h1 class="title mb-4">Genre Trends</h1>
+
+    <div class="predict-next-card mb-4">
+        <div class="predict-next-intro">
+            <h2 class="predict-next-title">What should I read next?</h2>
+            <p class="predict-next-hint mb-0">
+                Picks a {{ site_record_label|lower }} from your library whose genres match what you're recently into.
+                Skips {{ site_record_label_plural|lower }} you finished in the last year.
+            </p>
+        </div>
+        <button type="button" id="predictNextBtn" class="btn predict-next-btn">
+            <span class="predict-next-icon" aria-hidden="true">✦</span>
+            <span class="predict-next-btn-label">Predict my next {{site_record_label|lower}}</span>
+        </button>
+    </div>
+
+    <div id="predictNextResult" class="predict-result-card" hidden>
+        <div class="predict-result-empty" hidden>
+            <p class="mb-0"></p>
+        </div>
+        <div class="predict-result-body">
+            <div class="predict-result-header">
+                <span class="predict-result-category"></span>
+                <button type="button" class="btn btn-sm predict-result-reroll" aria-label="Get another recommendation">
+                    Try another ↻
+                </button>
+            </div>
+            <h3 class="predict-result-title"></h3>
+            <p class="predict-result-meta mb-2"></p>
+            <div class="trends-badge-row predict-result-badges"></div>
+            <p class="predict-result-footer mb-0"></p>
+        </div>
+    </div>
+
+    {% if trends.total_books == 0 %}
+        <div class="alert alert-info" role="alert">
+            <strong>Not enough data yet.</strong>
+            Once you have completed {{ site_record_label_plural|lower }} tagged with genres, this page will
+            show the periods of time where certain genres dominated your reading.
+        </div>
+    {% endif %}
+
+    {% if trends.total_books > 0 %}
+        {% if trends.current_interest %}
+            <div class="card mb-4 trends-current-card">
+                <div class="card-body">
+                    <h2 class="h5 card-title mb-2">You've recently been into…</h2>
+                    <div class="trends-badge-row">
+                        {% for item in trends.current_interest %}
+                            <span class="trends-genre-badge trends-genre-badge-strong">
+                                <span class="trends-genre-name">{{ item.genre }}</span>
+                                <span class="trends-genre-count">×{{ item.count }}</span>
+                            </span>
+                        {% endfor %}
+                    </div>
+                    {% if trends.current_window %}
+                        <p class="trends-current-hint mt-2 mb-0">
+                            Based on your last {{ trends.current_window.book_count }} completed
+                            {{ site_record_label|lower if trends.current_window.book_count == 1 else site_record_label_plural|lower }}
+                            ({{ trends.current_window.start_date.strftime('%d %b %Y') }}
+                            – {{ trends.current_window.end_date.strftime('%d %b %Y') }}).
+                            Only genres that appear repeatedly in that window are shown.
+                        </p>
+                    {% endif %}
+                </div>
+            </div>
+        {% endif %}
+
+        {% if trends.reread_suggestions %}
+            <div class="card mb-4 trends-rereads-card">
+                <div class="card-body">
+                    <h2 class="h5 card-title mb-2">{{ site_record_label_plural }} you might want to reread</h2>
+                    <p class="trends-current-hint mb-3">
+                        Older completed {{ site_record_label_plural|lower }} whose genres overlap with what you're into right now,
+                        sorted by overlap and then by how long ago you read them.
+                    </p>
+                    <ul class="trends-reread-list">
+                        {% for r in trends.reread_suggestions %}
+                            <li class="trends-reread-item">
+                                <div class="trends-reread-main">
+                                    <a href="#" data-book-link
+                                       data-category="completed"
+                                       data-book-id="{{ r.id }}"
+                                       class="trends-reread-title">{{ r.book }}</a>
+                                    <span class="trends-reread-date">{{ r.date.strftime('%d %b %Y') }}</span>
+                                </div>
+                                <div class="trends-badge-row trends-reread-badges">
+                                    {% for g in r.matched_genres %}
+                                        <span class="trends-genre-badge">
+                                            <span class="trends-genre-name">{{ g }}</span>
+                                        </span>
+                                    {% endfor %}
+                                </div>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        {% endif %}
+
+        {% if trends.charts %}
+            {% set ch = trends.charts %}
+            <section class="trends-charts mb-4">
+                <h2 class="h5 mb-3">Reading evolution</h2>
+                <p class="trends-meta mb-3">
+                    Bucketed by {{ ch.unit_label }}. Hover any point for the exact value.
+                </p>
+
+                <div class="trends-chart-card">
+                    <div class="trends-chart-tooltip" hidden>
+                        <strong class="trends-chart-tooltip-title"></strong>
+                        <span class="trends-chart-tooltip-meta"></span>
+                    </div>
+                    <div class="trends-chart-header">
+                        <h3 class="trends-chart-title">Top genres over time</h3>
+                        <span class="trends-chart-sub">{{ ch.genres.lines | length }} most-read genres, per {{ ch.unit_label }}</span>
+                    </div>
+                    <svg class="trends-chart-svg" viewBox="0 0 {{ ch.width }} {{ ch.height }}"
+                         role="img" aria-label="Top genres tracked per {{ ch.unit_label }} over time"
+                         preserveAspectRatio="none">
+                        {% for t in ch.genres.y_ticks %}
+                            <line class="trends-chart-grid"
+                                  x1="{{ ch.plot.left }}" x2="{{ ch.plot.right }}"
+                                  y1="{{ t.y }}" y2="{{ t.y }}" />
+                            <text class="trends-chart-axis-label"
+                                  x="{{ ch.plot.left - 6 }}" y="{{ t.y + 4 }}"
+                                  text-anchor="end">{{ t.value }}</text>
+                        {% endfor %}
+                        {% for t in ch.x_ticks %}
+                            <text class="trends-chart-axis-label"
+                                  x="{{ t.x }}" y="{{ ch.plot.bottom + 18 }}"
+                                  text-anchor="middle">{{ t.label }}</text>
+                        {% endfor %}
+                        <line class="trends-chart-axis"
+                              x1="{{ ch.plot.left }}" x2="{{ ch.plot.right }}"
+                              y1="{{ ch.plot.bottom }}" y2="{{ ch.plot.bottom }}" />
+                        {% for line in ch.genres.lines %}
+                            <polyline class="trends-chart-line"
+                                      points="{{ line.polyline }}"
+                                      fill="none" stroke="{{ line.color }}" />
+                            {% for p in line.points %}
+                                <g class="trends-chart-point"
+                                   tabindex="0"
+                                   data-tooltip-title="{{ line.genre }}"
+                                   data-tooltip-meta="{{ ch.buckets[loop.index0].full }} · {{ p.value }} {{ site_record_label|lower if p.value == 1 else site_record_label_plural|lower }}">
+                                    <circle class="trends-chart-hit"
+                                            cx="{{ p.x }}" cy="{{ p.y }}" r="10" fill="transparent"></circle>
+                                    <circle class="trends-chart-dot"
+                                            cx="{{ p.x }}" cy="{{ p.y }}" r="2.5"
+                                            fill="{{ line.color }}"></circle>
+                                </g>
+                            {% endfor %}
+                        {% endfor %}
+                    </svg>
+                    <ul class="trends-chart-legend">
+                        {% for line in ch.genres.lines %}
+                            <li>
+                                <span class="trends-chart-legend-swatch" style="background: {{ line.color }};"></span>
+                                <span class="trends-chart-legend-label">{{ line.genre }}</span>
+                                <span class="trends-chart-legend-total">{{ line.total }}</span>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </section>
+        {% endif %}
+
+        <div class="trends-periods">
+            <h2 class="h5 mb-3">Periods detected</h2>
+            <p class="trends-meta mb-3">
+                {{ trends.periods | length }} period{% if trends.periods|length != 1 %}s{% endif %}
+                detected across {{ trends.total_books }} completed {{ site_record_label|lower if trends.total_books == 1 else site_record_label_plural|lower }}
+                with genres.
+            </p>
+
+            <ol class="trends-period-list">
+                {% for period in trends.periods %}
+                    {% if period.gap_before_days %}
+                        {% if period.gap_before_days >= 365 %}
+                            {% set gap_label = (period.gap_before_days / 365.25) | round(1) ~ ' year break' %}
+                        {% elif period.gap_before_days >= 60 %}
+                            {% set gap_label = (period.gap_before_days / 30.4375) | round(0, 'floor') | int ~ ' month break' %}
+                        {% else %}
+                            {% set gap_label = period.gap_before_days ~ ' day break' %}
+                        {% endif %}
+                        <li class="trends-period-break" aria-hidden="true">
+                            <span class="trends-period-break-label">↯ {{ gap_label }}</span>
+                        </li>
+                    {% endif %}
+                    <li class="trends-period-item {% if loop.last %}trends-period-current{% endif %}">
+                        <div class="trends-period-header">
+                            <span class="trends-period-range">
+                                {{ period.start_date.strftime('%d %b %Y') }}
+                                –
+                                {{ period.end_date.strftime('%d %b %Y') }}
+                            </span>
+                            <span class="trends-period-meta">
+                                {{ period.book_count }} {{ site_record_label|lower if period.book_count == 1 else site_record_label_plural|lower }}
+                                · {{ period.all_genres_count }} distinct genre{% if period.all_genres_count != 1 %}s{% endif %}
+                            </span>
+                        </div>
+                        <div class="trends-badge-row">
+                            {% for item in period.top_genres %}
+                                <span class="trends-genre-badge">
+                                    <span class="trends-genre-name">{{ item.genre }}</span>
+                                    <span class="trends-genre-count">×{{ item.count }}</span>
+                                </span>
+                            {% endfor %}
+                        </div>
+                        {% if period.sample_books %}
+                            <details class="trends-period-details">
+                                <summary>Sample {{ site_record_label_plural|lower }}</summary>
+                                <ul class="trends-period-samples">
+                                    {% for b in period.sample_books %}
+                                        <li>{{ b }}</li>
+                                    {% endfor %}
+                                </ul>
+                            </details>
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ol>
+        </div>
+    {% endif %}
+
+    {% set missing_completed_count = trends.missing_completed | length %}
+    {% set missing_other_count = trends.missing_other | length %}
+    {% if missing_completed_count or missing_other_count %}
+        <section class="trends-missing-section">
+            <h2 class="h5 mb-2">{{ site_record_label_plural }} without genres</h2>
+            <p class="trends-meta mb-3">
+                {{ missing_completed_count + missing_other_count }} {{ site_record_label|lower if (missing_completed_count + missing_other_count) == 1 else site_record_label_plural|lower }} {% if (missing_completed_count + missing_other_count) != 1 %}have{% else %}has{% endif %}
+                no genre tags. Adding genres improves the accuracy of your trends.
+            </p>
+
+            {% if missing_completed_count %}
+                <details class="trends-missing-group" open>
+                    <summary>
+                        <span class="trends-missing-summary-label">Completed</span>
+                        <span class="trends-missing-summary-count">{{ missing_completed_count }}</span>
+                    </summary>
+                    <ul class="trends-missing-list">
+                        {% for b in trends.missing_completed %}
+                            <li class="trends-missing-item">
+                                <a href="#" data-book-link
+                                   data-category="completed"
+                                   data-book-id="{{ b.id }}">{{ b.book }}</a>
+                                {% if b.date %}
+                                    <span class="trends-missing-meta">{{ b.date }}</span>
+                                {% endif %}
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </details>
+            {% endif %}
+
+            {% if missing_other_count %}
+                {% set tbr_missing = trends.missing_other | selectattr('category', 'equalto', 'tbr') | list %}
+                {% set unfinished_missing = trends.missing_other | selectattr('category', 'equalto', 'unfinished') | list %}
+                {% if tbr_missing %}
+                    <details class="trends-missing-group">
+                        <summary>
+                            <span class="trends-missing-summary-label">{{ site_tbr_label }}</span>
+                            <span class="trends-missing-summary-count">{{ tbr_missing | length }}</span>
+                        </summary>
+                        <ul class="trends-missing-list">
+                            {% for b in tbr_missing %}
+                                <li class="trends-missing-item">
+                                    <a href="#" data-book-link
+                                       data-category="tbr"
+                                       data-book-id="{{ b.id }}">{{ b.book }}</a>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    </details>
+                {% endif %}
+                {% if unfinished_missing %}
+                    <details class="trends-missing-group">
+                        <summary>
+                            <span class="trends-missing-summary-label">Unfinished</span>
+                            <span class="trends-missing-summary-count">{{ unfinished_missing | length }}</span>
+                        </summary>
+                        <ul class="trends-missing-list">
+                            {% for b in unfinished_missing %}
+                                <li class="trends-missing-item">
+                                    <a href="#" data-book-link
+                                       data-category="unfinished"
+                                       data-book-id="{{ b.id }}">{{ b.book }}</a>
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    </details>
+                {% endif %}
+            {% endif %}
+        </section>
+    {% endif %}
+</div>
+
+<script>
+    (function () {
+        const cards = document.querySelectorAll(".trends-chart-card");
+        if (!cards.length) return;
+
+        cards.forEach(function (card) {
+            const svg = card.querySelector(".trends-chart-svg");
+            const tooltip = card.querySelector(".trends-chart-tooltip");
+            const titleEl = card.querySelector(".trends-chart-tooltip-title");
+            const metaEl = card.querySelector(".trends-chart-tooltip-meta");
+            if (!svg || !tooltip || !titleEl || !metaEl) return;
+
+            let activePoint = null;
+
+            function hideTooltip() {
+                tooltip.hidden = true;
+                activePoint = null;
+            }
+
+            function positionTooltip(clientX, clientY) {
+                if (!activePoint || tooltip.hidden) return;
+                const cardRect = card.getBoundingClientRect();
+                const tipRect = tooltip.getBoundingClientRect();
+                const offset = 14;
+                let left = clientX - cardRect.left + offset;
+                let top = clientY - cardRect.top - tipRect.height - offset;
+
+                if (left + tipRect.width > cardRect.width - 8) {
+                    left = clientX - cardRect.left - tipRect.width - offset;
+                }
+                if (top < 8) {
+                    top = clientY - cardRect.top + offset;
+                }
+
+                left = Math.max(8, Math.min(left, cardRect.width - tipRect.width - 8));
+                top = Math.max(8, Math.min(top, cardRect.height - tipRect.height - 8));
+
+                tooltip.style.left = left + "px";
+                tooltip.style.top = top + "px";
+            }
+
+            function showTooltip(point, clientX, clientY) {
+                titleEl.textContent = point.dataset.tooltipTitle || "";
+                metaEl.textContent = point.dataset.tooltipMeta || "";
+                tooltip.hidden = false;
+                activePoint = point;
+                positionTooltip(clientX, clientY);
+            }
+
+            svg.addEventListener("mouseover", function (event) {
+                const point = event.target.closest(".trends-chart-point");
+                if (!point || !svg.contains(point)) return;
+                showTooltip(point, event.clientX, event.clientY);
+            });
+
+            svg.addEventListener("mousemove", function (event) {
+                if (!activePoint) return;
+                positionTooltip(event.clientX, event.clientY);
+            });
+
+            svg.addEventListener("mouseleave", hideTooltip);
+
+            svg.addEventListener("focusin", function (event) {
+                const point = event.target.closest(".trends-chart-point");
+                if (!point || !svg.contains(point)) return;
+                const rect = point.getBoundingClientRect();
+                showTooltip(point, rect.left + rect.width / 2, rect.top);
+            });
+
+            svg.addEventListener("focusout", function (event) {
+                if (!svg.contains(event.relatedTarget)) hideTooltip();
+            });
+        });
+    })();
+</script>
+
+<script>
+    (function () {
+        const btn = document.getElementById("predictNextBtn");
+        const resultEl = document.getElementById("predictNextResult");
+        if (!btn || !resultEl) return;
+
+        const emptyEl = resultEl.querySelector(".predict-result-empty");
+        const emptyMsg = emptyEl.querySelector("p");
+        const bodyEl = resultEl.querySelector(".predict-result-body");
+        const categoryEl = resultEl.querySelector(".predict-result-category");
+        const titleEl = resultEl.querySelector(".predict-result-title");
+        const metaEl = resultEl.querySelector(".predict-result-meta");
+        const badgesEl = resultEl.querySelector(".predict-result-badges");
+        const footerEl = resultEl.querySelector(".predict-result-footer");
+        const rerollBtn = resultEl.querySelector(".predict-result-reroll");
+
+        const CATEGORY_CLASS = {
+            tbr: "series-book-category-tbr",
+            unfinished: "series-book-category-unfinished",
+            completed: "series-book-category-completed",
+        };
+        const seenKeys = new Set();
+
+        function showEmpty(message) {
+            emptyEl.hidden = false;
+            bodyEl.hidden = true;
+            emptyMsg.textContent = message;
+        }
+
+        function renderBook(pick, candidateCount, interest) {
+            emptyEl.hidden = true;
+            bodyEl.hidden = false;
+
+            categoryEl.className = "predict-result-category series-book-category";
+            categoryEl.classList.add(CATEGORY_CLASS[pick.category] || "");
+            categoryEl.textContent = pick.category_label;
+
+            titleEl.textContent = pick.book;
+            titleEl.setAttribute("data-book-link", "");
+            titleEl.setAttribute("data-category", pick.category);
+            titleEl.setAttribute("data-book-id", pick.id);
+            titleEl.role = "button";
+            titleEl.tabIndex = 0;
+
+            const metaParts = [];
+            if (pick.matched_genres && pick.matched_genres.length) {
+                metaParts.push(
+                    "Matches " + pick.matched_genres.length +
+                    " of your current-interest genre" +
+                    (pick.matched_genres.length === 1 ? "" : "s")
+                );
+            }
+            if (pick.date) metaParts.push("Added " + pick.date);
+            metaEl.textContent = metaParts.join(" · ");
+
+            badgesEl.innerHTML = "";
+            (pick.matched_genres || []).forEach(function (g) {
+                const badge = document.createElement("span");
+                badge.className = "trends-genre-badge";
+                const name = document.createElement("span");
+                name.className = "trends-genre-name";
+                name.textContent = g;
+                badge.appendChild(name);
+                badgesEl.appendChild(badge);
+            });
+
+            footerEl.textContent = "Picked from " + candidateCount + " candidate book" +
+                (candidateCount === 1 ? "" : "s") +
+                " that share genres with your recent reading.";
+        }
+
+        async function requestPick(exclude) {
+            const r = await fetch("/api/predict_next_book", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({exclude_ids: exclude || []}),
+            });
+            if (!r.ok) throw new Error("HTTP " + r.status);
+            return r.json();
+        }
+
+        async function fetchAndShow(useExclude) {
+            resultEl.hidden = false;
+            btn.disabled = true;
+            const originalLabel = btn.querySelector(".predict-next-btn-label").textContent;
+            btn.querySelector(".predict-next-btn-label").textContent = "Thinking…";
+            try {
+                const exclude = useExclude ? Array.from(seenKeys) : [];
+                const data = await requestPick(exclude);
+                if (!data.book) {
+                    if (data.reason === "no_interest") {
+                        showEmpty("No recent genre signal yet — read and tag a few books first.");
+                    } else {
+                        showEmpty("No unread book matches your current taste. Try clearing your seen list or expanding your TBR.");
+                    }
+                    return;
+                }
+                seenKeys.add(data.book.key);
+                renderBook(data.book, data.candidate_count, data.interest);
+            } catch (err) {
+                console.error(err);
+                showEmpty("Could not generate a recommendation right now. Try again.");
+            } finally {
+                btn.disabled = false;
+                btn.querySelector(".predict-next-btn-label").textContent = originalLabel;
+            }
+        }
+
+        btn.addEventListener("click", function () { fetchAndShow(false); });
+        rerollBtn.addEventListener("click", function () { fetchAndShow(true); });
+    })();
+</script>
+{% endblock %}

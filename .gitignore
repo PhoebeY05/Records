@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Flask / local runtime data
+instance/
+books.db
+records.db
+shows.db
+*.sqlite3
+flask_session/
+mal_relations_cache.json
+mal_animelist_*.xml
+
+# macOS
+.DS_Store
+
+# VS Code
+.vscode/

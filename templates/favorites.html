@@ -1,0 +1,83 @@
+{% extends "layout.html" %}
+
+{% block title %}Favorites{% endblock %}
+
+{% block main %}
+<div class="container book-list-page mt-4">
+    {% for msg in get_flashed_messages() %}
+    <div class="alert alert-info alert-dismissible fade show" role="alert">
+        {{msg}}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    </div>
+    {% endfor %}
+
+    <h1 class="title mb-2">Favorites</h1>
+    <p class="grey-text mb-4">{{ total }} favorited {{ site_record_label|lower if total == 1 else site_record_label_plural|lower }} across all categories.</p>
+
+    {% if total == 0 %}
+        <p class="grey-text text-center my-5">No favorites yet — tap the star next to a {{ site_record_label|lower }} on any list to add it here.</p>
+    {% endif %}
+
+    {% for section in sections %}
+        {% if section.books|length > 0 %}
+        <section class="favorites-section mb-5">
+            <div class="favorites-section-header">
+                <h2 class="favorites-section-title">{{ section.label }}</h2>
+                <a href="/{{ section.category }}" class="favorites-section-link">Go to {{ section.label }} →</a>
+                <span class="favorites-section-count">{{ section.books|length }}</span>
+                <button
+                    type="button"
+                    class="btn btn-sm favorites-section-toggle"
+                    data-bs-toggle="collapse"
+                    data-bs-target="#favorites-table-{{ section.category }}"
+                    aria-expanded="true"
+                    aria-controls="favorites-table-{{ section.category }}"
+                    title="Collapse or expand this section"
+                    aria-label="Collapse or expand {{ section.label }} section"
+                >
+                    <span class="favorites-section-toggle-icon" aria-hidden="true">▾</span>
+                </button>
+            </div>
+            <div class="collapse show" id="favorites-table-{{ section.category }}">
+            <div class="table-responsive-wrap">
+                <table class="table book-table align-middle">
+                    <thead>
+                        <tr>
+                            <th scope="col" class="col-name">Name</th>
+                            <th scope="col" class="col-status">Status</th>
+                            <th scope="col" class="col-date">Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for book in section.books %}
+                        <tr class="book-row" data-book-link data-category="{{ section.category }}" data-book-id="{{ book.id }}">
+                            <td class="col-name">
+                                <div class="book-name-cell">
+                                    <form action="/favorite/{{ section.category }}/{{ book.id }}" method="post" class="m-0">
+                                        <input type="hidden" name="redirect_to" value="/favorites">
+                                        <button type="submit" class="book-name-favorite is-favorite" aria-pressed="true" aria-label="Unfavorite" title="Unfavorite">
+                                            <span aria-hidden="true">★</span>
+                                        </button>
+                                    </form>
+                                    <span class="book-name">{{ book.book }}</span>
+                                </div>
+                            </td>
+                            <td class="col-status">
+                                {% if book.status %}
+                                <span class="book-status-badge">{{ book.status }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="col-date">
+                                <span class="book-date">{{ book.date }}</span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            </div>
+        </section>
+        {% endif %}
+    {% endfor %}
+</div>
+{% endblock %}

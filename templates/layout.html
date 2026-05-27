@@ -4,65 +4,409 @@
   <head>
       <meta name="viewport" content="width=device-width, initial-scale=1">
       <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
-      <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js" integrity="sha384-I7E8VVD/ismYTF4hNIPjVp/Zjvgyol6VFvRkX/vR+Vc4jQkC+hVqc2pM8ODewa9r" crossorigin="anonymous"></script>
-      <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.min.js" integrity="sha384-0pUGZvbkm6XF6gxjEnlmuGrJXVbNuzT9qBBavbLwCsOGabYfZo0T0to5eqruptLy" crossorigin="anonymous"></script>
+      <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
       <link href="../static/styles.css" rel="stylesheet">
+    <link rel="icon" type="image/svg+xml" href="{{ site_icon_url }}">
       <title>{% block title %}{% endblock %}</title>
     <script>
         document.addEventListener("DOMContentLoaded", function () {
-          choose = document.querySelector("#choose")
-          choose.addEventListener("click", function () {
-            localStorage.setItem("Clicked", "true")
+          document.querySelectorAll(".js-choose").forEach(function (btn) {
+            btn.addEventListener("click", function () {
+              localStorage.setItem("Clicked", "true")
+            })
           })
-          var buttonClicked = localStorage.getItem('Clicked')
-          window.onload = () => {
-              if (performance.navigation.type == 0 && buttonClicked == "true")
-              {
-                const myModal = new bootstrap.Modal('#random');
-                myModal.show();
-                localStorage.setItem("Clicked", "false")
+          const buttonClicked = localStorage.getItem('Clicked')
+          const navigationEntry = performance.getEntriesByType("navigation")[0]
+          const randomModal = document.getElementById("random")
+          if (navigationEntry && navigationEntry.type === "navigate" && buttonClicked == "true" && randomModal) {
+            const myModal = new bootstrap.Modal(randomModal)
+            myModal.show()
+            localStorage.setItem("Clicked", "false")
+          }
+
+          const searchModal = document.getElementById("searchModal")
+          if (searchModal) {
+            searchModal.addEventListener("shown.bs.modal", function () {
+              const searchInput = searchModal.querySelector('[name="search"]')
+              if (searchInput) {
+                searchInput.focus()
+                searchInput.select()
               }
-              
-            }   
+            })
+          }
         })
     </script>
   </head>
-  <nav class="navbar navbar-expand-lg navbar-light bg">
+  <nav class="navbar navbar-expand-lg navbar-dark bg main-nav sticky-top">
       <div class="container-fluid">
-        <img src="../static/icon.png" height=40, width="40" class="me-3"/>
-        <a class="navbar-brand georgia white-text" href="/home">Home</a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
+                <a class="navbar-brand main-nav-brand georgia" href="/home" aria-label="Go to home">
+                    <img src="{{ site_icon_url }}" height="34" width="34" alt="">
+                    <span class="main-nav-brand-text">{{ site_name }}</span>
+        </a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
           <span class="navbar-toggler-icon"></span>
-      </button>
-      <div class="collapse navbar-collapse smaller" id="navbarSupportedContent">
-        <ul class="navbar-nav mr-auto">
-          <li class="nav-item active">
-            <a class="nav-link georgia white-text" href="/tbr">To Be Read</a>
-          </li>
-          <li class="nav-item active">
-            <a class="nav-link georgia white-text" href="/completed">Completed</a>
-          </li>
-          <li class="nav-item active">
-            <a class="nav-link georgia white-text" href="/unfinished">Unfinished</a>
-          </li>
-          <li class="nav-item active">
-            <a class="nav-link georgia white-text" href="/add">Add Book</a>
-          </li>
-        </ul>
-        <div class = "navbar-nav mx-auto header ">
-          <img src="../static/book.png" height=30, width="30" class="mt-2 me-3"/>
-          <h1 class="header">Reading Records</h1> 
+        </button>
+        <div class="collapse navbar-collapse" id="mainNav">
+          <ul class="navbar-nav main-nav-links me-auto mb-2 mb-lg-0">
+            {% set books_active = request.path in ['/tbr', '/completed', '/unfinished', '/favorites'] %}
+            {% set insights_active = request.path in ['/series', '/genres', '/trends', '/analytics'] or request.path.startswith('/analytics/') %}
+            <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle georgia {% if books_active %}active{% endif %}" href="#" id="booksDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                {{ site_nav_label }}
+              </a>
+              <ul class="dropdown-menu" aria-labelledby="booksDropdown">
+                                <li><a class="dropdown-item georgia {% if request.path == '/tbr' %}active{% endif %}" href="/tbr">{{ site_tbr_label }}</a></li>
+                <li><a class="dropdown-item georgia {% if request.path == '/completed' %}active{% endif %}" href="/completed">Completed</a></li>
+                <li><a class="dropdown-item georgia {% if request.path == '/unfinished' %}active{% endif %}" href="/unfinished">Unfinished</a></li>
+                <li><a class="dropdown-item georgia {% if request.path == '/favorites' %}active{% endif %}" href="/favorites">Favorites</a></li>
+              </ul>
+            </li>
+            <li class="nav-item dropdown">
+              <a class="nav-link dropdown-toggle georgia {% if insights_active %}active{% endif %}" href="#" id="insightsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                Insights
+              </a>
+              <ul class="dropdown-menu" aria-labelledby="insightsDropdown">
+                <li><a class="dropdown-item georgia {% if request.path == '/series' %}active{% endif %}" href="/series">Series</a></li>
+                <li><a class="dropdown-item georgia {% if request.path in ['/genres', '/trends'] %}active{% endif %}" href="/genres">Genres</a></li>
+                <li><a class="dropdown-item georgia {% if request.path.startswith('/analytics') %}active{% endif %}" href="/analytics">Analytics</a></li>
+              </ul>
+            </li>
+          </ul>
+          <div class="main-nav-actions d-flex align-items-center gap-2 mb-2 mb-lg-0">
+                        <form action="/switch-mode" method="post" class="m-0">
+                            <input type="hidden" name="next" value="{{ request.full_path if request.query_string else request.path }}">
+                            <button type="submit" class="btn btn-outline-light main-nav-icon-btn main-nav-switch-btn" aria-label="{{ site_switch_label }}" title="{{ site_switch_label }}">
+                                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                    <path d="M7 7h10l-2.5-2.5L16 3l4 4-4 4-1.5-1.5L17 7H7a5 5 0 0 0 0 10h4v2H7a7 7 0 0 1 0-14Zm10 10H7l2.5 2.5L8 21l-4-4 4-4 1.5 1.5L7 17h10a5 5 0 0 0 0-10h-4V5h4a7 7 0 0 1 0 14Z"></path>
+                                </svg>
+                                <span class="visually-hidden">{{ site_switch_label }}</span>
+                            </button>
+                        </form>
+            <button type="button" class="btn btn-outline-light main-nav-icon-btn" data-bs-toggle="modal" data-bs-target="#searchModal" aria-label="Search {{ site_nav_label|lower }}">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M10.5 4a6.5 6.5 0 1 0 4.09 11.55l4.43 4.43 1.41-1.41-4.43-4.43A6.5 6.5 0 0 0 10.5 4Zm0 2a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9Z"></path>
+              </svg>
+                            <span class="visually-hidden">Search {{ site_nav_label|lower }}</span>
+            </button>
+            <a class="btn btn-outline-light main-nav-icon-btn main-nav-add-btn {% if request.path == '/add' %}active{% endif %}" href="/add" aria-label="Add a {{ site_record_label|lower }}">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M12 5v14M5 12h14"></path>
+              </svg>
+              <span class="visually-hidden">Add</span>
+            </a>
+            <form action="/logout" method="get" class="m-0">
+              <button class="btn btn-outline-light georgia main-nav-logout-btn" type="submit">Log Out</button>
+            </form>
+          </div>
         </div>
-        <form class="d-flex" action="/search" method="post">
-          <input class="form-control me-2 georgia thinner" type="search" placeholder="Search" name="search" aria-label="Search">
-          <button class="btn btn-outline-success button georgia white-text" type="submit">Search</button>
-        </form>
-        <form class = "nav-link" action="/logout" method ="get">
-          <button class="btn my-2 my-sm-0 georgia white-text" type="submit">Log Out</button>
-        </form>
       </div>
     </nav>
-  <body class="platinum">
+    <body class="platinum {{ site_mode_class }}">
       {% block main %}{% endblock %}
+
+      <div class="modal fade search-modal" id="searchModal" tabindex="-1" aria-labelledby="searchModalLabel" aria-hidden="true">
+          <div class="modal-dialog modal-dialog-centered">
+              <div class="modal-content search-modal-content">
+                  <div class="modal-header">
+                      <h2 class="modal-title georgia" id="searchModalLabel">Search {{ site_nav_label|lower }}</h2>
+                      <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                  </div>
+                  <form action="/search" method="post" role="search">
+                      <div class="modal-body">
+                          <label class="visually-hidden" for="searchBooksInput">Search {{ site_nav_label|lower }}</label>
+                          <input id="searchBooksInput" class="form-control georgia search-modal-input" type="search" placeholder="Search {{ site_nav_label|lower }}..." name="search" aria-label="Search {{ site_nav_label|lower }}" autocomplete="off">
+                      </div>
+                      <div class="modal-footer">
+                          <button type="button" class="btn btn-outline-secondary georgia" data-bs-dismiss="modal">Cancel</button>
+                          <button class="btn random-modal-primary georgia" type="submit">Search</button>
+                      </div>
+                  </form>
+              </div>
+          </div>
+      </div>
+
+      <div class="modal book-detail-modal fade" tabindex="-1" id="bookDetailModal" aria-hidden="true">
+          <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+              <form class="modal-content book-detail-form" method="post" action="">
+                  <div class="modal-header">
+                      <span class="book-detail-category-pill"></span>
+                      <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                  </div>
+                  <div class="modal-body">
+                      <h2 class="book-detail-title js-view"></h2>
+                      <label class="book-detail-edit-field js-edit" hidden>
+                          <span>{{ site_record_label }} name</span>
+                          <input type="text" name="book" required>
+                      </label>
+
+                      <dl class="book-detail-meta js-view">
+                          <div class="book-detail-pair"><dt>Status</dt><dd class="book-detail-status"></dd></div>
+                          <div class="book-detail-pair"><dt>Date added</dt><dd class="book-detail-date"></dd></div>
+                          <div class="book-detail-pair"><dt>Genres</dt><dd class="book-detail-genres"></dd></div>
+                          <div class="book-detail-pair"><dt>Series</dt><dd class="book-detail-series"></dd></div>
+                          {% if site_mode == "shows" %}
+                          <div class="book-detail-pair"><dt>Episodes</dt><dd class="book-detail-episodes"></dd></div>
+                          {% endif %}
+                          <div class="book-detail-pair book-detail-reread-pair" hidden><dt>Rereads</dt><dd class="book-detail-reread"></dd></div>
+                          <div class="book-detail-pair book-detail-days-pair" hidden><dt>Days to finish</dt><dd class="book-detail-days"></dd></div>
+                      </dl>
+
+                      <div class="book-detail-edit-fields js-edit" hidden>
+                          <label class="book-detail-edit-field"><span>Status</span><input type="text" name="status"></label>
+                          <label class="book-detail-edit-field">
+                              <span>Genres</span>
+                              <div class="d-flex gap-2 align-items-stretch">
+                                  <input type="text" name="genres" class="flex-grow-1">
+                                  <button type="button" class="btn btn-outline-secondary btn-sm js-suggest-genres">Suggest</button>
+                              </div>
+                          </label>
+                          <label class="book-detail-edit-field"><span>Series</span><input type="text" name="series"></label>
+                          {% if site_mode == "shows" %}
+                          <label class="book-detail-edit-field"><span>Episodes</span><input type="text" name="episodes" placeholder="e.g. 12/24"></label>
+                          {% endif %}
+                          <label class="book-detail-edit-field book-detail-reread-edit-field js-reread-edit" hidden>
+                              <span>Rereads</span>
+                              <input type="number" name="reread" min="0" step="1" inputmode="numeric" required>
+                          </label>
+                      </div>
+
+                      <div class="book-detail-notes-section js-view">
+                          <p class="book-detail-notes-label">Notes</p>
+                          <p class="book-detail-notes-text"></p>
+                      </div>
+                      <label class="book-detail-edit-field js-edit" hidden>
+                          <span>Notes</span>
+                          <textarea name="notes" rows="4"></textarea>
+                      </label>
+                  </div>
+                  <div class="modal-footer">
+                      <span class="book-save-status book-detail-save-status" aria-live="polite" hidden></span>
+                      <button type="button" class="btn btn-outline-secondary book-detail-edit-toggle js-view-mode">✎ Edit</button>
+                      <button type="button" class="btn btn-outline-secondary book-detail-edit-cancel js-edit-mode" hidden>Cancel</button>
+                      <button type="submit" class="btn random-modal-primary js-edit-mode" hidden>Save</button>
+                      <button type="button" class="btn btn-secondary js-view-mode" data-bs-dismiss="modal">Close</button>
+                  </div>
+              </form>
+          </div>
+      </div>
+
+      <script>
+          (function () {
+              const modalEl = document.getElementById("bookDetailModal");
+              if (!modalEl) return;
+              const form = modalEl.querySelector(".book-detail-form");
+              const CATEGORY_LABELS = { completed: "Completed", unfinished: "Unfinished", tbr: {{ site_tbr_label|tojson }} };
+              let currentData = null;
+              let saveStatusTimer = null;
+
+              function setEditMode(editing) {
+                  modalEl.querySelectorAll(".js-view").forEach(function (el) { el.hidden = editing; });
+                  modalEl.querySelectorAll(".js-edit").forEach(function (el) { el.hidden = !editing; });
+                  modalEl.querySelectorAll(".js-view-mode").forEach(function (el) { el.hidden = editing; });
+                  modalEl.querySelectorAll(".js-edit-mode").forEach(function (el) { el.hidden = !editing; });
+              }
+
+              function showSaveStatus(message) {
+                  const statusEl = modalEl.querySelector(".book-detail-save-status");
+                  if (!statusEl) return;
+                  if (saveStatusTimer) {
+                      clearTimeout(saveStatusTimer);
+                      saveStatusTimer = null;
+                  }
+                  statusEl.textContent = message || "Saved";
+                  statusEl.hidden = false;
+                  statusEl.classList.add("is-visible");
+                  saveStatusTimer = setTimeout(function () {
+                      statusEl.classList.remove("is-visible");
+                      statusEl.hidden = true;
+                      statusEl.textContent = "";
+                      saveStatusTimer = null;
+                  }, 1800);
+              }
+
+              function escapeHtml(value) {
+                  return String(value).replace(/[&<>'"]/g, function (character) {
+                      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[character];
+                  });
+              }
+
+              function linkifyText(value) {
+                  if (value === undefined || value === null || value === "" || value === "None") {
+                      return "—";
+                  }
+
+                  const source = String(value);
+                  const urlPattern = /(https?:\/\/[^\s<]+|www\.[^\s<]+)/gi;
+                  let html = "";
+                  let lastIndex = 0;
+                  let match;
+
+                  while ((match = urlPattern.exec(source)) !== null) {
+                      html += escapeHtml(source.slice(lastIndex, match.index)).replace(/\n/g, "<br>");
+                      const url = match[0];
+                      const href = url.startsWith("www.") ? "https://" + url : url;
+                      html += '<a href="' + encodeURI(href) + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(url) + '</a>';
+                      lastIndex = match.index + url.length;
+                  }
+
+                  html += escapeHtml(source.slice(lastIndex)).replace(/\n/g, "<br>");
+                  return html || "—";
+              }
+
+              function populate(data) {
+                  currentData = data;
+                  form.action = "/update/" + data.category + "/" + data.id;
+                  const categoryPill = modalEl.querySelector(".book-detail-category-pill");
+                  if (categoryPill) {
+                      categoryPill.className = "book-detail-category-pill";
+                      categoryPill.textContent = CATEGORY_LABELS[data.category] || data.category;
+                  }
+                  modalEl.querySelector(".book-detail-title").textContent = data.book;
+                  modalEl.querySelector(".book-detail-status").textContent = data.status || "—";
+                  modalEl.querySelector(".book-detail-date").textContent = data.date || "—";
+                  modalEl.querySelector(".book-detail-genres").textContent = data.genres || "—";
+                  modalEl.querySelector(".book-detail-series").textContent = data.series || "—";
+                  const episodesEl = modalEl.querySelector(".book-detail-episodes");
+                  if (episodesEl) {
+                      episodesEl.textContent = data.episodes || "—";
+                  }
+                  modalEl.querySelector(".book-detail-notes-text").innerHTML = linkifyText(data.notes);
+
+                  const rereadPair = modalEl.querySelector(".book-detail-reread-pair");
+                  if (data.reread !== undefined) {
+                      rereadPair.hidden = false;
+                      modalEl.querySelector(".book-detail-reread").textContent = data.reread + " time(s)";
+                  } else { rereadPair.hidden = true; }
+
+                  const daysPair = modalEl.querySelector(".book-detail-days-pair");
+                  if (data.days !== undefined) {
+                      daysPair.hidden = false;
+                      modalEl.querySelector(".book-detail-days").textContent = data.days;
+                  } else { daysPair.hidden = true; }
+
+                  form.querySelector('[name="book"]').value = data.book || "";
+                  form.querySelector('[name="status"]').value = data.status || "";
+                  form.querySelector('[name="genres"]').value = data.genres || "";
+                  form.querySelector('[name="series"]').value = data.series || "";
+                  const episodesInput = form.querySelector('[name="episodes"]');
+                  if (episodesInput) {
+                      episodesInput.value = data.episodes || "";
+                  }
+                  form.querySelector('[name="notes"]').value = data.notes || "";
+                  const rereadEditField = modalEl.querySelector(".js-reread-edit");
+                  const rereadInput = form.querySelector('[name="reread"]');
+                  if (rereadEditField && rereadInput) {
+                      if (data.reread !== undefined) {
+                          rereadEditField.hidden = false;
+                          rereadInput.value = data.reread;
+                      } else {
+                          rereadEditField.hidden = true;
+                          rereadInput.value = "";
+                      }
+                  }
+
+                  setEditMode(false);
+              }
+
+              document.addEventListener("click", function (e) {
+                  const link = e.target.closest("[data-book-link]");
+                  if (!link) return;
+                  if (e.target.closest("button, input, select, textarea, label, form")) return;
+                  e.preventDefault();
+                  const category = link.dataset.category;
+                  const bookId = link.dataset.bookId;
+                  if (!category || !bookId) return;
+                  fetch("/api/book/" + category + "/" + bookId)
+                      .then(function (r) {
+                          if (!r.ok) throw new Error("HTTP " + r.status);
+                          return r.json();
+                      })
+                      .then(function (data) {
+                          populate(data);
+                          bootstrap.Modal.getOrCreateInstance(modalEl).show();
+                      })
+                      .catch(function (err) {
+                          console.error("Failed to load book", err);
+                          window.location.href = "/" + category;
+                      });
+              });
+
+              modalEl.querySelector(".book-detail-edit-toggle").addEventListener("click", function () {
+                  setEditMode(true);
+              });
+              modalEl.querySelector(".book-detail-edit-cancel").addEventListener("click", function () {
+                  if (currentData) populate(currentData);
+              });
+
+              form.addEventListener("submit", async function (event) {
+                  event.preventDefault();
+                  const submitButton = form.querySelector('button[type="submit"]');
+                  if (submitButton) {
+                      submitButton.disabled = true;
+                      submitButton.dataset.originalLabel = submitButton.textContent;
+                      submitButton.textContent = "Saving…";
+                  }
+                  try {
+                      const response = await fetch(form.action, {
+                          method: "POST",
+                          headers: { "X-Requested-With": "XMLHttpRequest" },
+                          body: new FormData(form),
+                      });
+                      const data = await response.json();
+                      if (!response.ok) {
+                          throw new Error(data.error || "Save failed.");
+                      }
+                      populate(data);
+                      showSaveStatus("Saved");
+                  } catch (err) {
+                      window.alert(err.message || "Save failed.");
+                  } finally {
+                      if (submitButton) {
+                          submitButton.disabled = false;
+                          submitButton.textContent = submitButton.dataset.originalLabel || "Save";
+                      }
+                  }
+              });
+
+              const suggestBtn = modalEl.querySelector(".js-suggest-genres");
+              if (suggestBtn) {
+                  suggestBtn.addEventListener("click", async function () {
+                      const titleInput = form.querySelector('[name="book"]');
+                      const genresInput = form.querySelector('[name="genres"]');
+                      if (!titleInput || !genresInput) return;
+                      const title = (titleInput.value || "").trim();
+                      if (!title) { titleInput.focus(); return; }
+                      const originalLabel = suggestBtn.textContent;
+                      const originalPlaceholder = genresInput.placeholder;
+                      suggestBtn.disabled = true;
+                      suggestBtn.textContent = "…";
+                      try {
+                          const response = await fetch("/api/infer_genres", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ title: title }),
+                          });
+                          if (!response.ok) throw new Error("HTTP " + response.status);
+                          const data = await response.json();
+                          const genres = (data.suggestions || [])
+                              .map(function (s) { return s.genre; })
+                              .filter(Boolean);
+                          if (genres.length) {
+                              genresInput.value = genres.join(", ");
+                          } else {
+                              genresInput.placeholder = "No suggestions found";
+                              setTimeout(function () { genresInput.placeholder = originalPlaceholder; }, 3000);
+                          }
+                      } catch (err) {
+                          genresInput.placeholder = "Suggestion failed — try again";
+                          setTimeout(function () { genresInput.placeholder = originalPlaceholder; }, 3000);
+                      } finally {
+                          suggestBtn.disabled = false;
+                          suggestBtn.textContent = originalLabel;
+                      }
+                  });
+              }
+          })();
+      </script>
   </body>
 </html>
