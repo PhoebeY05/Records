@@ -3120,6 +3120,11 @@ def switch(original, new, book_id):
 
 @app.route("/home", methods = ["GET", "POST"])
 def home():
+    if not session_user_exists():
+        session.clear()
+        flash("Your session is no longer valid. Please log in again.")
+        return redirect("/")
+
     current_year = date.today().year
     completed_total_count = db.execute("SELECT COUNT(*) AS count FROM completed WHERE user_id = ?", session["user_id"])[0]["count"]
     unfinished_total_count = db.execute("SELECT COUNT(*) AS count FROM unfinished WHERE user_id = ?", session["user_id"])[0]["count"]
