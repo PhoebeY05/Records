@@ -2568,6 +2568,46 @@ body.site-mode-shows .search-card .search-status.series-book-category-unfinished
     accent-color: #6B0F1A;
     cursor: pointer;
 }
+.predict-next-statuses {
+    border: none;
+    padding: 0;
+    margin: 0.3rem 0 0 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem 1rem;
+    font-size: 0.84rem;
+    color: #6d625b;
+}
+.predict-next-status-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+.predict-next-status-group.is-disabled {
+    opacity: 0.45;
+}
+.predict-next-status-group-label {
+    font-weight: 600;
+    color: #6d625b;
+}
+.predict-next-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    cursor: pointer;
+    user-select: none;
+}
+.predict-next-status.is-disabled {
+    cursor: not-allowed;
+}
+.predict-next-status input[type="checkbox"] {
+    accent-color: #6B0F1A;
+    cursor: pointer;
+}
+body.site-mode-shows .predict-next-status input[type="checkbox"] {
+    accent-color: #0b5ea8;
+}
 
 .predict-result-card {
     margin-bottom: 1.25rem;

@@ -288,6 +288,13 @@ def ensure_shows_schema(connection):
     _add_column_if_missing(connection, "unfinished", "episodes", "TEXT")
     _add_column_if_missing(connection, "completed", "episodes", "TEXT")
 
+    # One-off migration: standardise shows-mode statuses on the airing
+    # vocabulary so the predict-filter has a single coherent set across all
+    # three tables. Idempotent — re-running is a no-op once renamed.
+    connection.execute("UPDATE completed SET status = 'Finished Airing' WHERE status = 'Finished'")
+    connection.execute("UPDATE tbr SET status = 'Not Yet Aired' WHERE status IN ('Uncompleted', 'Unknown')")
+    connection.execute("UPDATE unfinished SET status = 'Not Yet Aired' WHERE status = 'Unknown'")
+
 
 ensure_shows_schema(shows_db)
 
@@ -1835,30 +1842,33 @@ def _fetch_anime_plus_history(username):
     return result
 
 
-_MAL_PUBLIC_LIST_CACHE = {}  # username -> (fetched_at, {anime_id: {updated, end}})
+_MAL_PUBLIC_LIST_CACHE = {}  # (username, status_code) -> (fetched_at, {anime_id: {...}})
 _MAL_PUBLIC_LIST_TTL_SECONDS = 600
 _MAL_PUBLIC_LIST_PAGE_SIZE = 300
 
 
-def _fetch_mal_public_completed_list(username):
-    """Scrape every completed entry from MAL's public animelist into a date map.
+def _fetch_mal_public_animelist(username, status_code):
+    """Scrape every entry from a slice of MAL's public animelist.
 
-    MAL embeds the per-entry data as a JSON array on `data-items` of the main
-    table. Each entry includes `updated_at` (unix ts of last edit) and
-    `anime_end_date_string` (DD-MM-YY of final episode airing). Paginates in
-    chunks of 300 via `?offset=` until an empty page comes back.
+    MAL embeds per-entry data as a JSON array on `data-items` of the main
+    table. Each entry has `updated_at` (unix ts), `anime_start_date_string`
+    and `anime_end_date_string` (DD-MM-YY). `status_code` matches MAL's list
+    statuses (2=Completed, 6=Plan to Watch, 1=Watching, 3=On Hold, 4=Dropped).
+    Paginates in chunks of 300 via `?offset=`.
 
-    Returns `{anime_id (int): {"updated": date|None, "end": date|None}}`.
+    Returns `{anime_id (int): {"updated": date|None, "start": date|None,
+    "end": date|None}}`.
     """
     if not username:
         return {}
-    cached = _MAL_PUBLIC_LIST_CACHE.get(username)
+    cache_key = (username, status_code)
+    cached = _MAL_PUBLIC_LIST_CACHE.get(cache_key)
     if cached and (time.time() - cached[0]) < _MAL_PUBLIC_LIST_TTL_SECONDS:
         return cached[1]
     result = {}
     offset = 0
     while True:
-        url = f"https://myanimelist.net/animelist/{username}?status=2&offset={offset}"
+        url = f"https://myanimelist.net/animelist/{username}?status={status_code}&offset={offset}"
         try:
             response = requests.get(url, headers={"User-Agent": DESKTOP_UA}, timeout=20)
             response.raise_for_status()
@@ -1885,19 +1895,47 @@ def _fetch_mal_public_completed_list(username):
                     updated_date = date.fromtimestamp(ts)
                 except (OSError, OverflowError, ValueError):
                     updated_date = None
-            end_date = None
-            end_str = item.get("anime_end_date_string") or ""
-            if end_str:
+            def _parse(field):
+                s = item.get(field) or ""
+                if not s:
+                    return None
                 try:
-                    end_date = datetime.strptime(end_str, "%d-%m-%y").date()
+                    return datetime.strptime(s, "%d-%m-%y").date()
                 except ValueError:
-                    end_date = None
-            result[anime_id] = {"updated": updated_date, "end": end_date}
+                    return None
+            result[anime_id] = {
+                "updated": updated_date,
+                "start": _parse("anime_start_date_string"),
+                "end": _parse("anime_end_date_string"),
+            }
         if len(items) < _MAL_PUBLIC_LIST_PAGE_SIZE:
             break
         offset += _MAL_PUBLIC_LIST_PAGE_SIZE
-    _MAL_PUBLIC_LIST_CACHE[username] = (time.time(), result)
+    _MAL_PUBLIC_LIST_CACHE[cache_key] = (time.time(), result)
     return result
+
+
+def _fetch_mal_public_completed_list(username):
+    """Back-compat shim: completed (status=2) only."""
+    return _fetch_mal_public_animelist(username, 2)
+
+
+def _classify_airing_status(start_date, end_date, today):
+    """Bucket an anime by its airing window relative to `today`.
+
+    Always returns one of 'Not Yet Aired', 'Airing', 'Finished Airing'. The
+    end check wins over start (ongoing-then-finished flow), so a series with
+    a known finale always lands in 'Finished Airing' once that date has
+    passed even if start is unknown. When both dates are missing we default
+    to 'Not Yet Aired' so the vocabulary stays closed (no 'Unknown' bucket).
+    """
+    if end_date and end_date <= today:
+        return "Finished Airing"
+    if start_date and start_date > today:
+        return "Not Yet Aired"
+    if start_date and start_date <= today:
+        return "Airing"
+    return "Not Yet Aired"
 
 
 def _suggest_finish_date(animedb_id, anime_plus_history, mal_public_list):
@@ -3165,7 +3203,7 @@ def import_mal_xml_entries(entries, user_id, detect_series=True, mal_username=No
                 days,
                 notes_text,
                 0,
-                "Finished",
+                "Finished Airing",
                 None,
                 favorite,
                 episodes_text or None,
@@ -3195,7 +3233,7 @@ def import_mal_xml_entries(entries, user_id, detect_series=True, mal_username=No
                 "INSERT INTO tbr (user_id, book, status, date, notes, series, favorite, episodes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 user_id,
                 title,
-                "Uncompleted",
+                "Not Yet Aired",
                 today_date,
                 notes_text,
                 None,
@@ -3674,6 +3712,11 @@ def render_category_page(category, template_name):
         and get_site_mode() == "shows"
         and os.path.exists(_mal_xml_path(session["user_id"]))
     )
+    airing_status_feature_available = (
+        category in ("tbr", "unfinished")
+        and get_site_mode() == "shows"
+        and os.path.exists(_mal_xml_path(session["user_id"]))
+    )
     max_page = max(1, math.ceil(total_books / BOOK_PAGE_SIZE)) if total_books else 1
     page_num = min(page_num, max_page)
     offset = (page_num - 1) * BOOK_PAGE_SIZE
@@ -3708,6 +3751,8 @@ def render_category_page(category, template_name):
         page_size=BOOK_PAGE_SIZE,
         bulk_suggest_count=bulk_suggest_count,
         finish_date_feature_available=finish_date_feature_available,
+        airing_status_feature_available=airing_status_feature_available,
+        airing_status_category=category if airing_status_feature_available else None,
     )
 
 
@@ -4458,7 +4503,16 @@ def trends_view():
         flash("Your session is no longer valid. Please log in again.")
         return redirect("/")
     data = compute_genre_trends(session["user_id"])
-    return render_template("trends.html", trends=data, title="Genre Trends")
+    predict_status_options = {
+        cat: get_status_options(cat, session["user_id"])
+        for cat in ("tbr", "unfinished", "completed")
+    }
+    return render_template(
+        "trends.html",
+        trends=data,
+        title="Genre Trends",
+        predict_status_options=predict_status_options,
+    )
 
 
 def _get_recent_interest_set(user_id):
@@ -4499,7 +4553,7 @@ CATEGORY_LABELS = {
 }
 
 
-def predict_next_book(user_id, exclude_ids=None, categories=None):
+def predict_next_book(user_id, exclude_ids=None, categories=None, statuses=None):
     """Recommend a single book to read next, based on overlap with the
     user's current-interest genres.
 
@@ -4518,6 +4572,10 @@ def predict_next_book(user_id, exclude_ids=None, categories=None):
     {"tbr", "unfinished", "completed"}. Defaults to all three. An empty
     iterable returns the `no_category` sentinel so the caller can prompt
     the user to pick at least one.
+
+    `statuses` further restricts to rows whose `status` is in the given
+    iterable. `None` means no status filter. An empty iterable returns
+    the `no_status` sentinel.
     """
     all_categories = ("tbr", "unfinished", "completed")
     if categories is None:
@@ -4526,6 +4584,13 @@ def predict_next_book(user_id, exclude_ids=None, categories=None):
         active_categories = tuple(c for c in all_categories if c in set(categories))
     if not active_categories:
         return {"book": None, "reason": "no_category", "interest": []}
+
+    if statuses is None:
+        status_filter_set = None
+    else:
+        status_filter_set = {s for s in statuses if isinstance(s, str) and s}
+        if not status_filter_set:
+            return {"book": None, "reason": "no_status", "interest": []}
 
     interest_set, interest_list = _get_recent_interest_set(user_id)
     if not interest_set:
@@ -4565,12 +4630,14 @@ def predict_next_book(user_id, exclude_ids=None, categories=None):
     candidates = []
     for cat in active_categories:
         rows = db.execute(
-            f"SELECT id, book, genres, date, series FROM {cat} WHERE user_id = ?",
+            f"SELECT id, book, genres, date, series, status FROM {cat} WHERE user_id = ?",
             user_id,
         )
         for r in rows:
             key = f"{cat}:{r['id']}"
             if key in exclude_ids:
+                continue
+            if status_filter_set is not None and (r.get("status") or "") not in status_filter_set:
                 continue
             series_name = (r.get("series") or "").strip()
             if series_name and series_name.lower() != "none" and series_name in exclude_series:
@@ -4652,7 +4719,10 @@ def api_predict_next_book():
     categories = payload.get("categories")
     if categories is not None and not isinstance(categories, list):
         categories = None
-    result = predict_next_book(session["user_id"], exclude_ids=exclude, categories=categories)
+    statuses = payload.get("statuses")
+    if statuses is not None and not isinstance(statuses, list):
+        statuses = None
+    result = predict_next_book(session["user_id"], exclude_ids=exclude, categories=categories, statuses=statuses)
     return result
 
 
@@ -5226,6 +5296,121 @@ def api_bulk_suggest_genres(category):
         "skipped": skipped,
         "books": updated_books,
         "remaining": count_books_missing_genres_with_filters(category, session["user_id"]),
+    }
+
+
+_AIRING_MAL_STATUS_CODES = {
+    "tbr": [6],            # Plan to Watch
+    "unfinished": [1, 3, 4],  # Watching, On Hold, Dropped
+}
+
+
+def _fetch_air_dates_for_category(username, category):
+    """Pull MAL public-list air-date data for every entry that could land in
+    the given local table. Merges multiple MAL statuses in parallel."""
+    codes = _AIRING_MAL_STATUS_CODES.get(category, [])
+    if not codes:
+        return {}
+    if len(codes) == 1:
+        return _fetch_mal_public_animelist(username, codes[0])
+    merged = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=len(codes)) as pool:
+        for partial in pool.map(lambda c: _fetch_mal_public_animelist(username, c), codes):
+            merged.update(partial)
+    return merged
+
+
+def _airing_eligible_updates(user_id, category):
+    """Shared core for count + bulk-update endpoints. Returns
+    `(eligible_pairs, error_msg)` where each pair is `(row, new_status)` for
+    rows whose stored status differs from what MAL air dates suggest. Rows
+    without a usable air-date signal fall back to "Unknown" so the table ends
+    up in a single coherent vocabulary."""
+    if category not in _AIRING_MAL_STATUS_CODES:
+        return [], "invalid category"
+    xml_lookup = load_mal_xml_lookup(user_id)
+    if not xml_lookup:
+        return [], "Upload your MAL XML export first."
+    username = get_mal_username_from_xml(user_id)
+    if not username:
+        return [], "Couldn't read your MAL username from the saved XML."
+    air_dates = _fetch_air_dates_for_category(username, category)
+    if not air_dates:
+        return [], f"Could not load MAL air-date data for {username}."
+    rows = db.execute(
+        f"SELECT id, book, status FROM {category} WHERE user_id = ? ORDER BY id",
+        user_id,
+    )
+    today = date.today()
+    eligible = []
+    for row in rows:
+        key = normalize_book_key(row["book"] or "")
+        aid_str = xml_lookup.get(key)
+        if not aid_str:
+            continue
+        try:
+            aid = int(aid_str)
+        except ValueError:
+            continue
+        entry = air_dates.get(aid)
+        if not entry:
+            new_status = "Not Yet Aired"
+        else:
+            new_status = _classify_airing_status(entry.get("start"), entry.get("end"), today)
+        if (row["status"] or "") == new_status:
+            continue
+        eligible.append((row, new_status))
+    return eligible, None
+
+
+def count_airing_status_candidates(user_id, category):
+    eligible, _err = _airing_eligible_updates(user_id, category)
+    return len(eligible)
+
+
+@app.route("/api/count_airing_status_candidates/<category>", methods=["GET"])
+def api_count_airing_status_candidates(category):
+    if not session_user_exists():
+        return {"error": "auth"}, 401
+    if category not in _AIRING_MAL_STATUS_CODES:
+        return {"error": "invalid category"}, 400
+    return {"count": count_airing_status_candidates(session["user_id"], category)}
+
+
+@app.route("/api/bulk_update_airing_status/<category>", methods=["POST"])
+def api_bulk_update_airing_status(category):
+    """Reclassify rows in `category` into airing-status buckets (Finished
+    Airing / Airing / Not Yet Aired / Unknown) using each anime's start/end
+    air dates from MAL. Batched so the client can show progress and cancel."""
+    if not session_user_exists():
+        return {"error": "auth"}, 401
+    if category not in _AIRING_MAL_STATUS_CODES:
+        return {"error": "invalid category"}, 400
+
+    eligible, err = _airing_eligible_updates(session["user_id"], category)
+    if err:
+        return {"updated": 0, "skipped": 0, "books": [], "remaining": 0, "error": err}
+
+    data = request.get_json(silent=True) or {}
+    try:
+        batch_size = int(data.get("batch_size", 20))
+    except (TypeError, ValueError):
+        batch_size = 20
+    batch_size = max(1, min(batch_size, 100))
+
+    updated_books = []
+    for row, new_status in eligible[:batch_size]:
+        db.execute(
+            f"UPDATE {category} SET status = ? WHERE id = ? AND user_id = ?",
+            new_status, row["id"], session["user_id"],
+        )
+        updated_books.append({"id": row["id"], "title": row["book"], "status": new_status})
+
+    return {
+        "updated": len(updated_books),
+        "skipped": 0,
+        "books": updated_books,
+        "remaining": max(0, len(eligible) - len(updated_books)),
     }
 
 

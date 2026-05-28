@@ -23,6 +23,21 @@
                 <label class="predict-next-category"><input type="checkbox" name="predict-cat" value="unfinished" checked> Unfinished</label>
                 <label class="predict-next-category"><input type="checkbox" name="predict-cat" value="completed" checked> Completed</label>
             </fieldset>
+            {% set status_cat_labels = {"tbr": ("To Watch" if site_mode == "shows" else "To Be Read"), "unfinished": "Unfinished", "completed": "Completed"} %}
+            {% if predict_status_options and (predict_status_options.tbr or predict_status_options.unfinished or predict_status_options.completed) %}
+            <fieldset class="predict-next-statuses mt-2" id="predictNextStatuses" aria-label="Pick statuses to draw from">
+                {% for cat in ["tbr", "unfinished", "completed"] %}
+                    {% if predict_status_options[cat] %}
+                        <span class="predict-next-status-group" data-category="{{ cat }}">
+                            <span class="predict-next-status-group-label">{{ status_cat_labels[cat] }}:</span>
+                            {% for st in predict_status_options[cat] %}
+                                <label class="predict-next-status"><input type="checkbox" name="predict-status" data-category="{{ cat }}" value="{{ st }}" checked> {{ st }}</label>
+                            {% endfor %}
+                        </span>
+                    {% endif %}
+                {% endfor %}
+            </fieldset>
+            {% endif %}
         </div>
         <button type="button" id="predictNextBtn" class="btn predict-next-btn">
             <span class="predict-next-icon" aria-hidden="true">✦</span>
@@ -404,19 +419,31 @@
         const footerEl = resultEl.querySelector(".predict-result-footer");
         const rerollBtn = resultEl.querySelector(".predict-result-reroll");
         const categoryBoxes = Array.from(document.querySelectorAll('#predictNextCategories input[name="predict-cat"]'));
+        const statusBoxes = Array.from(document.querySelectorAll('#predictNextStatuses input[name="predict-status"]'));
 
         const CATEGORY_CLASS = {
             tbr: "series-book-category-tbr",
             unfinished: "series-book-category-unfinished",
             completed: "series-book-category-completed",
         };
-        const STORAGE_KEY = "predict_next_categories";
+        const CATEGORY_STORAGE_KEY = "predict_next_categories";
+        const STATUS_STORAGE_KEY = "predict_next_statuses";
         const seenKeys = new Set();
 
         try {
-            const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+            const saved = JSON.parse(localStorage.getItem(CATEGORY_STORAGE_KEY) || "null");
             if (Array.isArray(saved)) {
                 categoryBoxes.forEach(function (cb) { cb.checked = saved.includes(cb.value); });
+            }
+        } catch (e) { /* ignore */ }
+
+        try {
+            const saved = JSON.parse(localStorage.getItem(STATUS_STORAGE_KEY) || "null");
+            if (Array.isArray(saved)) {
+                statusBoxes.forEach(function (cb) {
+                    const tag = cb.dataset.category + "::" + cb.value;
+                    cb.checked = saved.includes(tag);
+                });
             }
         } catch (e) { /* ignore */ }
 
@@ -424,11 +451,41 @@
             return categoryBoxes.filter(function (cb) { return cb.checked; }).map(function (cb) { return cb.value; });
         }
 
+        function selectedStatuses() {
+            const activeCats = new Set(selectedCategories());
+            return statusBoxes
+                .filter(function (cb) { return cb.checked && activeCats.has(cb.dataset.category); })
+                .map(function (cb) { return cb.value; });
+        }
+
+        function syncStatusEnabled() {
+            const activeCats = new Set(selectedCategories());
+            statusBoxes.forEach(function (cb) {
+                const enabled = activeCats.has(cb.dataset.category);
+                cb.disabled = !enabled;
+                cb.parentElement.classList.toggle("is-disabled", !enabled);
+            });
+            document.querySelectorAll(".predict-next-status-group").forEach(function (g) {
+                g.classList.toggle("is-disabled", !activeCats.has(g.dataset.category));
+            });
+        }
+
         categoryBoxes.forEach(function (cb) {
             cb.addEventListener("change", function () {
-                try { localStorage.setItem(STORAGE_KEY, JSON.stringify(selectedCategories())); } catch (e) {}
+                try { localStorage.setItem(CATEGORY_STORAGE_KEY, JSON.stringify(selectedCategories())); } catch (e) {}
+                syncStatusEnabled();
             });
         });
+
+        statusBoxes.forEach(function (cb) {
+            cb.addEventListener("change", function () {
+                const checked = statusBoxes.filter(function (x) { return x.checked; })
+                    .map(function (x) { return x.dataset.category + "::" + x.value; });
+                try { localStorage.setItem(STATUS_STORAGE_KEY, JSON.stringify(checked)); } catch (e) {}
+            });
+        });
+
+        syncStatusEnabled();
 
         function showEmpty(message) {
             emptyEl.hidden = false;
@@ -482,7 +539,11 @@
             const r = await fetch("/api/predict_next_book", {
                 method: "POST",
                 headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({exclude_ids: exclude || [], categories: selectedCategories()}),
+                body: JSON.stringify({
+                    exclude_ids: exclude || [],
+                    categories: selectedCategories(),
+                    statuses: selectedStatuses(),
+                }),
             });
             if (!r.ok) throw new Error("HTTP " + r.status);
             return r.json();
@@ -501,8 +562,10 @@
                         showEmpty("No recent genre signal yet — read and tag a few books first.");
                     } else if (data.reason === "no_category") {
                         showEmpty("Pick at least one category to draw from.");
+                    } else if (data.reason === "no_status") {
+                        showEmpty("Pick at least one status to draw from.");
                     } else {
-                        showEmpty("No matching {{ site_record_label|lower }} in the selected categories. Try checking more categories or clearing your seen list.");
+                        showEmpty("No matching {{ site_record_label|lower }} in the selected categories and statuses. Try widening the filters or clearing your seen list.");
                     }
                     return;
                 }
