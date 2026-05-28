@@ -887,7 +887,7 @@
                     <div class="summary-card">
                         <div class="summary-value">{{ stats.totals.rereads_total }}</div>
                         <div class="summary-label">
-                            Rereads
+                            {% if site_mode == 'shows' %}Rewatches{% else %}Rereads{% endif %}
                             {% if stats.totals.reread_books %}
                                 <span class="summary-sublabel">Across {{ stats.totals.reread_books }} {{ site_record_label|lower if stats.totals.reread_books == 1 else site_record_label_plural|lower }}</span>
                             {% endif %}
@@ -1028,8 +1028,8 @@
                     </div>
                     <div class="mini-card">
                         <div class="mini-value">{{ stats.ratios.reread_share }}%</div>
-                        <div class="mini-label">Reread share</div>
-                        <div class="mini-subtitle">Share of completed {{ site_record_label_plural|lower }} reread ≥ once</div>
+                        <div class="mini-label">{% if site_mode == 'shows' %}Rewatch share{% else %}Reread share{% endif %}</div>
+                        <div class="mini-subtitle">Share of completed {{ site_record_label_plural|lower }} {% if site_mode == 'shows' %}rewatched{% else %}reread{% endif %} ≥ once</div>
                     </div>
                 </div>
             </section>
@@ -1214,10 +1214,10 @@
                 <div class="card-head">
                     <div>
                         <div class="card-kicker">Reading profile</div>
-                        <h2 class="card-title">Genres, series, and rereads</h2>
+                        <h2 class="card-title">Genres, series, and {% if site_mode == 'shows' %}rewatches{% else %}rereads{% endif %}</h2>
                     </div>
                 </div>
-                <p class="section-note">Genres, series, and rereads show what you come back to most often.</p>
+                <p class="section-note">Genres, series, and {% if site_mode == 'shows' %}rewatches{% else %}rereads{% endif %} show what you come back to most often.</p>
 
                 <div class="subtle-grid">
                     {% if stats.top_genres %}
@@ -1261,12 +1261,12 @@
 
                 {% if stats.top_rereads %}
                     <div class="card" style="margin-top:0.9rem;">
-                        <h3 class="section-title" style="margin-top:0;">Most reread books</h3>
+                        <h3 class="section-title" style="margin-top:0;">{% if site_mode == 'shows' %}Most rewatched {{ site_record_label_plural|lower }}{% else %}Most reread books{% endif %}</h3>
                         <ul class="list-card">
                             {% for r in stats.top_rereads %}
                                 <li class="list-row">
                                     <span class="list-title">{{ r.book }}</span>
-                                    <span class="list-meta">×{{ r.reread }} reread{% if r.reread != 1 %}s{% endif %}</span>
+                                    <span class="list-meta">×{{ r.reread }} {% if site_mode == 'shows' %}rewatch{% else %}reread{% endif %}{% if r.reread != 1 %}s{% endif %}</span>
                                 </li>
                             {% endfor %}
                         </ul>

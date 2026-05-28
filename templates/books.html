@@ -107,10 +107,10 @@
                     </div>
                     {% if page == "/completed" %}
                     <div class="col-12 col-md">
-                        <select class="form-select grey {% if selected_reread %}filter-active{% endif %}" name="reread_filter" onchange="this.form.submit()" aria-label="Filter by rereads">
-                            <option value="">{% if selected_reread != "" %}Rereads: {{ selected_reread }}{% else %}Filter by rereads...{% endif %}</option>
+                        <select class="form-select grey {% if selected_reread %}filter-active{% endif %}" name="reread_filter" onchange="this.form.submit()" aria-label="Filter by {% if site_mode == 'shows' %}rewatches{% else %}rereads{% endif %}">
+                            <option value="">{% if selected_reread != "" %}{% if site_mode == 'shows' %}Rewatches: {{ selected_reread }}{% else %}Rereads: {{ selected_reread }}{% endif %}{% else %}{% if site_mode == 'shows' %}Filter by rewatches...{% else %}Filter by rereads...{% endif %}{% endif %}</option>
                             {% for n in reread_options %}
-                                <option value="{{n}}" {% if selected_reread == n|string %}selected{% endif %}>{{n}} reread{{ '' if n == 1 else 's' }}</option>
+                                <option value="{{n}}" {% if selected_reread == n|string %}selected{% endif %}>{{n}} {% if site_mode == 'shows' %}rewatch{% else %}reread{% endif %}{{ '' if n == 1 else 's' }}</option>
                             {% endfor %}
                         </select>
                     </div>
@@ -183,7 +183,7 @@
                                             <div class="book-info-pair"><dt>Status</dt><dd>{{book.status or "—"}}</dd></div>
                                             <div class="book-info-pair"><dt>Genres</dt><dd>{{book.genres or "—"}}</dd></div>
                                             <div class="book-info-pair"><dt>Series</dt><dd>{{book.series or "—"}}</dd></div>
-                                            {% if book.reread is defined %}<div class="book-info-pair"><dt>Rereads</dt><dd>{{book.reread}} time(s)</dd></div>{% endif %}
+                                            {% if book.reread is defined %}<div class="book-info-pair"><dt>{% if site_mode == 'shows' %}Rewatches{% else %}Rereads{% endif %}</dt><dd>{{book.reread}} time(s)</dd></div>{% endif %}
                                             {% if book.days is defined %}<div class="book-info-pair"><dt>Days to finish</dt><dd>{{book.days}}</dd></div>{% endif %}
                                         </dl>
                                         <div class="book-info-notes">
@@ -216,7 +216,7 @@
                                         </label>
                                         {% if book.reread is defined %}
                                         <label class="book-edit-field">
-                                            <span class="book-edit-label">Rereads</span>
+                                            <span class="book-edit-label">{% if site_mode == 'shows' %}Rewatches{% else %}Rereads{% endif %}</span>
                                             <input type="number" name="reread" value="{{ book.reread }}" min="0" step="1" inputmode="numeric" required>
                                         </label>
                                         {% endif %}
@@ -590,7 +590,7 @@
                         dd.textContent = data.genres || "—";
                     } else if (label === "Series") {
                         dd.textContent = data.series || "—";
-                    } else if (label === "Rereads") {
+                    } else if (label === "Rereads" || label === "Rewatches") {
                         if (data.reread !== undefined) {
                             pair.hidden = false;
                             dd.textContent = data.reread + " time(s)";

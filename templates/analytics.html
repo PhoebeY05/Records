@@ -54,7 +54,7 @@
                 <div class="analytics-stat-card">
                     <div class="analytics-stat-value">{{ stats.totals.rereads_total }}</div>
                     <div class="analytics-stat-label">
-                        Rereads
+                        {% if site_mode == 'shows' %}Rewatches{% else %}Rereads{% endif %}
                         {% if stats.totals.reread_books %}
                             <span class="analytics-stat-sublabel">Across {{ stats.totals.reread_books }} {{ site_record_label|lower if stats.totals.reread_books == 1 else site_record_label_plural|lower }}</span>
                         {% endif %}

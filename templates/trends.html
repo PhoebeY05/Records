@@ -80,7 +80,7 @@
         {% if trends.reread_suggestions %}
             <div class="card mb-4 trends-rereads-card">
                 <div class="card-body">
-                    <h2 class="h5 card-title mb-2">{{ site_record_label_plural }} you might want to reread</h2>
+                    <h2 class="h5 card-title mb-2">{% if site_mode == 'shows' %}{{ site_record_label_plural }} you might want to rewatch{% else %}{{ site_record_label_plural }} you might want to reread{% endif %}</h2>
                     <p class="trends-current-hint mb-3">
                         Older completed {{ site_record_label_plural|lower }} whose genres overlap with what you're into right now,
                         sorted by overlap and then by how long ago you read them.

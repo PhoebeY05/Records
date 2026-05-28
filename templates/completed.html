@@ -1,4 +1,4 @@
-{% set ticked = "Reread" %}
+{% set ticked = "Rewatch" %}
 {% set page = "/completed" %}
 
 {% set title = "Completed" %}
@@ -7,7 +7,7 @@
 
 {% block checked %}
 <form action="/completed" method="post" class="m-0">
-    <button class="book-info-toggle" type="submit" name="book" value="{{book.id}}" aria-label="Increment reread count">
+    <button class="book-info-toggle" type="submit" name="book" value="{{book.id}}" aria-label="Increment rewatch count">
         <img src="../static/reread.png" alt="Plus 1" height="26" width="26">
     </button>
 </form>
