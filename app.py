@@ -1771,6 +1771,236 @@ def load_mal_xml_lookup(user_id):
     return lookup
 
 
+_ANIME_PLUS_HISTORY_CACHE = {}  # username -> (fetched_at, {animedb_id: date})
+_ANIME_PLUS_HISTORY_TTL_SECONDS = 600
+
+
+def _fetch_anime_plus_history(username):
+    """Scrape anime.plus's per-user history page for the latest event date per anime.
+
+    The page groups episode-watch events into sections whose `id` encodes the
+    bucket precision: `date-YYYY-MM-DD`, `month-YYYY-MM`, `year-YYYY`, or
+    `month-unknown`. Returns `{animedb_id: date}` using the latest bucket date
+    found for each anime. Month/year buckets are normalized to the 15th /
+    July 1 respectively (mid-bucket estimate). The `month-unknown` bucket is
+    skipped because it carries no date signal.
+    """
+    if not username:
+        return {}
+    cached = _ANIME_PLUS_HISTORY_CACHE.get(username)
+    if cached and (time.time() - cached[0]) < _ANIME_PLUS_HISTORY_TTL_SECONDS:
+        return cached[1]
+    url = f"https://anime.plus/{username}/history,anime"
+    try:
+        response = requests.get(url, headers={"User-Agent": DESKTOP_UA}, timeout=20)
+        response.raise_for_status()
+    except Exception:
+        return {}
+    soup = BeautifulSoup(response.text, "html.parser")
+    result = {}
+    for section in soup.select("div.entries-sub-wrapper"):
+        sid = section.get("id") or ""
+        bucket_date = None
+        m = re.match(r"^date-(\d{4})-(\d{2})-(\d{2})$", sid)
+        if m:
+            try:
+                bucket_date = date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+            except ValueError:
+                bucket_date = None
+        else:
+            m2 = re.match(r"^month-(\d{4})-(\d{2})$", sid)
+            if m2:
+                try:
+                    bucket_date = date(int(m2.group(1)), int(m2.group(2)), 15)
+                except ValueError:
+                    bucket_date = None
+            else:
+                m3 = re.match(r"^year-(\d{4})$", sid)
+                if m3:
+                    try:
+                        bucket_date = date(int(m3.group(1)), 7, 1)
+                    except ValueError:
+                        bucket_date = None
+        if bucket_date is None:
+            continue
+        for anchor in section.select('a[href*="/anime/"]'):
+            match = re.search(r"/anime/(\d+)", anchor.get("href", ""))
+            if not match:
+                continue
+            animedb_id = match.group(1)
+            existing = result.get(animedb_id)
+            if existing is None or bucket_date > existing:
+                result[animedb_id] = bucket_date
+    _ANIME_PLUS_HISTORY_CACHE[username] = (time.time(), result)
+    return result
+
+
+_MAL_PUBLIC_LIST_CACHE = {}  # username -> (fetched_at, {anime_id: {updated, end}})
+_MAL_PUBLIC_LIST_TTL_SECONDS = 600
+_MAL_PUBLIC_LIST_PAGE_SIZE = 300
+
+
+def _fetch_mal_public_completed_list(username):
+    """Scrape every completed entry from MAL's public animelist into a date map.
+
+    MAL embeds the per-entry data as a JSON array on `data-items` of the main
+    table. Each entry includes `updated_at` (unix ts of last edit) and
+    `anime_end_date_string` (DD-MM-YY of final episode airing). Paginates in
+    chunks of 300 via `?offset=` until an empty page comes back.
+
+    Returns `{anime_id (int): {"updated": date|None, "end": date|None}}`.
+    """
+    if not username:
+        return {}
+    cached = _MAL_PUBLIC_LIST_CACHE.get(username)
+    if cached and (time.time() - cached[0]) < _MAL_PUBLIC_LIST_TTL_SECONDS:
+        return cached[1]
+    result = {}
+    offset = 0
+    while True:
+        url = f"https://myanimelist.net/animelist/{username}?status=2&offset={offset}"
+        try:
+            response = requests.get(url, headers={"User-Agent": DESKTOP_UA}, timeout=20)
+            response.raise_for_status()
+        except Exception:
+            break
+        soup = BeautifulSoup(response.text, "html.parser")
+        table = soup.find(attrs={"data-items": True})
+        if not table:
+            break
+        try:
+            items = json.loads(table.get("data-items") or "[]")
+        except json.JSONDecodeError:
+            break
+        if not items:
+            break
+        for item in items:
+            anime_id = item.get("anime_id")
+            if not isinstance(anime_id, int):
+                continue
+            updated_date = None
+            ts = item.get("updated_at")
+            if isinstance(ts, (int, float)) and ts > 0:
+                try:
+                    updated_date = date.fromtimestamp(ts)
+                except (OSError, OverflowError, ValueError):
+                    updated_date = None
+            end_date = None
+            end_str = item.get("anime_end_date_string") or ""
+            if end_str:
+                try:
+                    end_date = datetime.strptime(end_str, "%d-%m-%y").date()
+                except ValueError:
+                    end_date = None
+            result[anime_id] = {"updated": updated_date, "end": end_date}
+        if len(items) < _MAL_PUBLIC_LIST_PAGE_SIZE:
+            break
+        offset += _MAL_PUBLIC_LIST_PAGE_SIZE
+    _MAL_PUBLIC_LIST_CACHE[username] = (time.time(), result)
+    return result
+
+
+def _suggest_finish_date(animedb_id, anime_plus_history, mal_public_list):
+    """Pick the best finish-date estimate for a single animedb_id.
+
+    Priority order:
+      1. anime.plus episode-watch event (semantically "watched on")
+      2. MAL public list `updated_at` (last entry edit — upper-bound proxy)
+      3. MAL anime end air date (objective minimum: when finale aired)
+    """
+    if not animedb_id:
+        return None
+    suggested = anime_plus_history.get(animedb_id)
+    if suggested:
+        return suggested
+    try:
+        aid_int = int(animedb_id)
+    except (TypeError, ValueError):
+        return None
+    entry = mal_public_list.get(aid_int)
+    if not entry:
+        return None
+    return entry.get("updated") or entry.get("end")
+
+
+def load_mal_xml_empty_finish_titles(user_id):
+    """{normalized_title: animedb_id} for Completed entries whose MAL XML has no finish date."""
+    path = _mal_xml_path(user_id)
+    if not os.path.exists(path):
+        return {}
+    try:
+        with open(path, "rb") as f:
+            entries = parse_mal_xml(f.read()) or []
+    except OSError:
+        return {}
+    result = {}
+    for entry in entries:
+        if (entry.get("status") or "").strip() != "Completed":
+            continue
+        finish = (entry.get("finish_date") or "").strip()
+        if finish and finish != "0000-00-00":
+            continue
+        title = entry.get("title", "")
+        animedb_id = entry.get("animedb_id", "")
+        if title and animedb_id:
+            result[normalize_book_key(title)] = animedb_id
+    return result
+
+
+def get_mal_username_from_xml(user_id):
+    path = _mal_xml_path(user_id)
+    if not os.path.exists(path):
+        return ""
+    try:
+        with open(path, "rb") as f:
+            return parse_mal_user_name(f.read()) or ""
+    except OSError:
+        return ""
+
+
+def _load_finish_date_sources(username):
+    """Fetch anime.plus history and MAL public list in parallel."""
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        f_history = pool.submit(_fetch_anime_plus_history, username)
+        f_mal = pool.submit(_fetch_mal_public_completed_list, username)
+        return f_history.result(), f_mal.result()
+
+
+def count_completed_missing_finish_date(user_id):
+    """Completed rows where MAL XML has no finish_date AND at least one of our
+    external sources knows a better date than the row currently shows.
+
+    Matches the API's eligibility check exactly so the button count and the
+    actual processable count never disagree.
+    """
+    titles_map = load_mal_xml_empty_finish_titles(user_id)
+    if not titles_map:
+        return 0
+    username = get_mal_username_from_xml(user_id)
+    if not username:
+        return 0
+    history, mal_list = _load_finish_date_sources(username)
+    if not history and not mal_list:
+        return 0
+    rows = db.execute("SELECT book, date FROM completed WHERE user_id = ?", user_id)
+    count = 0
+    for r in rows:
+        key = normalize_book_key(r["book"] or "")
+        animedb_id = titles_map.get(key)
+        if not animedb_id:
+            continue
+        suggested = _suggest_finish_date(animedb_id, history, mal_list)
+        if not suggested:
+            continue
+        try:
+            current = datetime.strptime(str(r["date"]), "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            current = None
+        if current != suggested:
+            count += 1
+    return count
+
+
 def _find_mal_url(title):
     """Use MyAnimeList's prefix-search JSON API to find the top match URL.
 
@@ -3437,6 +3667,13 @@ def render_category_page(category, template_name):
 
     total_books = count_books_with_filters(category, session["user_id"], status_filter, existence_filter, reread_filter)
     bulk_suggest_count = count_books_missing_genres_with_filters(category, session["user_id"])
+    # The count itself is loaded async via /api/count_finish_date_candidates;
+    # computing it inline does 5 HTTP fetches (~3MB) and blocks the page render.
+    finish_date_feature_available = (
+        category == "completed"
+        and get_site_mode() == "shows"
+        and os.path.exists(_mal_xml_path(session["user_id"]))
+    )
     max_page = max(1, math.ceil(total_books / BOOK_PAGE_SIZE)) if total_books else 1
     page_num = min(page_num, max_page)
     offset = (page_num - 1) * BOOK_PAGE_SIZE
@@ -3470,6 +3707,7 @@ def render_category_page(category, template_name):
         next_page_num=page_num + 1,
         page_size=BOOK_PAGE_SIZE,
         bulk_suggest_count=bulk_suggest_count,
+        finish_date_feature_available=finish_date_feature_available,
     )
 
 
@@ -4920,6 +5158,113 @@ def api_bulk_suggest_genres(category):
         "skipped": skipped,
         "books": updated_books,
         "remaining": count_books_missing_genres_with_filters(category, session["user_id"]),
+    }
+
+
+@app.route("/api/count_finish_date_candidates", methods=["GET"])
+def api_count_finish_date_candidates():
+    """Async-loaded count for the suggest-finish-dates button.
+
+    Kept out of the page render path because it triggers anime.plus + MAL
+    public list fetches (5 HTTP calls, ~3MB) on a cache miss.
+    """
+    if not session_user_exists():
+        return {"error": "auth"}, 401
+    return {"count": count_completed_missing_finish_date(session["user_id"])}
+
+
+@app.route("/api/bulk_suggest_finish_dates", methods=["POST"])
+def api_bulk_suggest_finish_dates():
+    """Backfill completed.date for rows whose MAL XML had no finish_date.
+
+    Mirrors `api_bulk_suggest_genres`: processes one batch per call so the
+    client can show progress and cancel. The candidate set is "completed rows
+    whose normalized title matches a MAL XML entry with `my_finish_date =
+    0000-00-00`". Suggested dates come from anime.plus's per-user history page
+    (only the MAL username is needed). Rows already matching the suggested
+    date are skipped so reruns are no-ops.
+    """
+    if not session_user_exists():
+        return {"error": "auth"}, 401
+    user_id = session["user_id"]
+
+    titles_map = load_mal_xml_empty_finish_titles(user_id)
+    if not titles_map:
+        return {"updated": 0, "skipped": 0, "books": [], "remaining": 0,
+                "error": "Upload your MAL XML export first."}
+
+    username = get_mal_username_from_xml(user_id)
+    if not username:
+        return {"updated": 0, "skipped": 0, "books": [], "remaining": 0,
+                "error": "Couldn't read your MAL username from the saved XML."}
+    history, mal_list = _load_finish_date_sources(username)
+    if not history and not mal_list:
+        return {"updated": 0, "skipped": 0, "books": [], "remaining": 0,
+                "error": f"Could not load anime.plus or MAL public list for {username}."}
+
+    data = request.get_json(silent=True) or {}
+    try:
+        batch_size = int(data.get("batch_size", 10))
+    except (TypeError, ValueError):
+        batch_size = 10
+    batch_size = max(1, min(batch_size, 50))
+
+    rows = db.execute(
+        "SELECT id, book, date FROM completed WHERE user_id = ? ORDER BY date DESC, id DESC",
+        user_id,
+    )
+
+    eligible = []
+    for row in rows:
+        key = normalize_book_key(row["book"] or "")
+        animedb_id = titles_map.get(key)
+        if not animedb_id:
+            continue
+        suggested = _suggest_finish_date(animedb_id, history, mal_list)
+        if not suggested:
+            continue
+        try:
+            current = datetime.strptime(str(row["date"]), "%Y-%m-%d").date()
+        except (ValueError, TypeError):
+            current = None
+        if current == suggested:
+            continue
+        eligible.append((row, suggested))
+
+    updated_books = []
+    for row, suggested in eligible[:batch_size]:
+        prev_row = db.execute(
+            "SELECT date FROM completed WHERE user_id = ? AND id != ? AND date < ? "
+            "ORDER BY date DESC LIMIT 1",
+            user_id, row["id"], suggested,
+        )
+        days = 0
+        if prev_row:
+            try:
+                prev_date = datetime.strptime(str(prev_row[0]["date"]), "%Y-%m-%d").date()
+                days = max((suggested - prev_date).days, 0)
+            except (ValueError, TypeError):
+                days = 0
+        db.execute(
+            "UPDATE completed SET date = ?, days = ? WHERE id = ? AND user_id = ?",
+            suggested, days, row["id"], user_id,
+        )
+        db.execute(
+            "UPDATE combined SET date = ? WHERE user_id = ? AND page = 'completed' AND id = ?",
+            suggested, user_id, row["id"],
+        )
+        updated_books.append({
+            "id": row["id"],
+            "title": row["book"],
+            "date": suggested.isoformat(),
+            "days": days,
+        })
+
+    return {
+        "updated": len(updated_books),
+        "skipped": 0,
+        "books": updated_books,
+        "remaining": max(0, len(eligible) - len(updated_books)),
     }
 
 
