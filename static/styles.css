@@ -2547,6 +2547,27 @@ body.site-mode-shows .search-card .search-status.series-book-category-unfinished
     font-size: 1rem;
     line-height: 1;
 }
+.predict-next-categories {
+    border: none;
+    padding: 0;
+    margin: 0.3rem 0 0 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem 1rem;
+    font-size: 0.88rem;
+    color: #6d625b;
+}
+.predict-next-category {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    cursor: pointer;
+    user-select: none;
+}
+.predict-next-category input[type="checkbox"] {
+    accent-color: #6B0F1A;
+    cursor: pointer;
+}
 
 .predict-result-card {
     margin-bottom: 1.25rem;
@@ -4060,6 +4081,9 @@ body.site-mode-shows .predict-next-btn {
 body.site-mode-shows .predict-next-btn:hover {
     background: #084780;
     border-color: #084780;
+}
+body.site-mode-shows .predict-next-category input[type="checkbox"] {
+    accent-color: #0b5ea8;
 }
 body.site-mode-shows .predict-result-card {
     border-color: #c9def5;

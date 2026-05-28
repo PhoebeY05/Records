@@ -18,6 +18,11 @@
                 Picks a {{ site_record_label|lower }} from your library whose genres match what you're recently into.
                 Skips {{ site_record_label_plural|lower }} you finished in the last year.
             </p>
+            <fieldset class="predict-next-categories mt-2" id="predictNextCategories" aria-label="Pick categories to draw from">
+                <label class="predict-next-category"><input type="checkbox" name="predict-cat" value="tbr" checked> {{ "To Watch" if site_mode == 'shows' else "To Be Read" }}</label>
+                <label class="predict-next-category"><input type="checkbox" name="predict-cat" value="unfinished" checked> Unfinished</label>
+                <label class="predict-next-category"><input type="checkbox" name="predict-cat" value="completed" checked> Completed</label>
+            </fieldset>
         </div>
         <button type="button" id="predictNextBtn" class="btn predict-next-btn">
             <span class="predict-next-icon" aria-hidden="true">✦</span>
@@ -398,13 +403,32 @@
         const badgesEl = resultEl.querySelector(".predict-result-badges");
         const footerEl = resultEl.querySelector(".predict-result-footer");
         const rerollBtn = resultEl.querySelector(".predict-result-reroll");
+        const categoryBoxes = Array.from(document.querySelectorAll('#predictNextCategories input[name="predict-cat"]'));
 
         const CATEGORY_CLASS = {
             tbr: "series-book-category-tbr",
             unfinished: "series-book-category-unfinished",
             completed: "series-book-category-completed",
         };
+        const STORAGE_KEY = "predict_next_categories";
         const seenKeys = new Set();
+
+        try {
+            const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+            if (Array.isArray(saved)) {
+                categoryBoxes.forEach(function (cb) { cb.checked = saved.includes(cb.value); });
+            }
+        } catch (e) { /* ignore */ }
+
+        function selectedCategories() {
+            return categoryBoxes.filter(function (cb) { return cb.checked; }).map(function (cb) { return cb.value; });
+        }
+
+        categoryBoxes.forEach(function (cb) {
+            cb.addEventListener("change", function () {
+                try { localStorage.setItem(STORAGE_KEY, JSON.stringify(selectedCategories())); } catch (e) {}
+            });
+        });
 
         function showEmpty(message) {
             emptyEl.hidden = false;
@@ -458,7 +482,7 @@
             const r = await fetch("/api/predict_next_book", {
                 method: "POST",
                 headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({exclude_ids: exclude || []}),
+                body: JSON.stringify({exclude_ids: exclude || [], categories: selectedCategories()}),
             });
             if (!r.ok) throw new Error("HTTP " + r.status);
             return r.json();
@@ -475,8 +499,10 @@
                 if (!data.book) {
                     if (data.reason === "no_interest") {
                         showEmpty("No recent genre signal yet — read and tag a few books first.");
+                    } else if (data.reason === "no_category") {
+                        showEmpty("Pick at least one category to draw from.");
                     } else {
-                        showEmpty("No unread book matches your current taste. Try clearing your seen list or expanding your TBR.");
+                        showEmpty("No matching {{ site_record_label|lower }} in the selected categories. Try checking more categories or clearing your seen list.");
                     }
                     return;
                 }

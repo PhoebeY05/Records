@@ -4499,7 +4499,7 @@ CATEGORY_LABELS = {
 }
 
 
-def predict_next_book(user_id, exclude_ids=None):
+def predict_next_book(user_id, exclude_ids=None, categories=None):
     """Recommend a single book to read next, based on overlap with the
     user's current-interest genres.
 
@@ -4508,7 +4508,25 @@ def predict_next_book(user_id, exclude_ids=None):
     current-interest set score higher. TBR > unfinished > older completed
     is preferred via small category boosts. Returns one of the top
     candidates at random so the user can re-roll the suggestion.
+
+    Series handling: each series contributes at most one candidate per call
+    (the natural-sort first eligible entry, e.g. vol 1 before vol 2). Once
+    a series-bearing item is excluded via `exclude_ids`, no other entry
+    from the same series can be picked on re-roll.
+
+    `categories` restricts the source pool to the given subset of
+    {"tbr", "unfinished", "completed"}. Defaults to all three. An empty
+    iterable returns the `no_category` sentinel so the caller can prompt
+    the user to pick at least one.
     """
+    all_categories = ("tbr", "unfinished", "completed")
+    if categories is None:
+        active_categories = all_categories
+    else:
+        active_categories = tuple(c for c in all_categories if c in set(categories))
+    if not active_categories:
+        return {"book": None, "reason": "no_category", "interest": []}
+
     interest_set, interest_list = _get_recent_interest_set(user_id)
     if not interest_set:
         return {
@@ -4522,15 +4540,40 @@ def predict_next_book(user_id, exclude_ids=None):
     exclude_ids = set(exclude_ids or [])
     category_boost = {"tbr": 1.0, "unfinished": 0.9, "completed": 0.6}
 
+    # Derive the series of every excluded pick so re-rolls don't surface a
+    # different volume from the same series.
+    exclude_series = set()
+    for key in exclude_ids:
+        if ":" not in key:
+            continue
+        cat, raw_id = key.split(":", 1)
+        if cat not in ("tbr", "unfinished", "completed"):
+            continue
+        try:
+            ex_id = int(raw_id)
+        except ValueError:
+            continue
+        row = db.execute(
+            f"SELECT series FROM {cat} WHERE id = ? AND user_id = ?",
+            ex_id, user_id,
+        )
+        if row:
+            s = (row[0].get("series") or "").strip()
+            if s and s.lower() != "none":
+                exclude_series.add(s)
+
     candidates = []
-    for cat in ("tbr", "unfinished", "completed"):
+    for cat in active_categories:
         rows = db.execute(
-            f"SELECT id, book, genres, date FROM {cat} WHERE user_id = ?",
+            f"SELECT id, book, genres, date, series FROM {cat} WHERE user_id = ?",
             user_id,
         )
         for r in rows:
             key = f"{cat}:{r['id']}"
             if key in exclude_ids:
+                continue
+            series_name = (r.get("series") or "").strip()
+            if series_name and series_name.lower() != "none" and series_name in exclude_series:
                 continue
             genres = set(_parse_genre_list(r.get("genres")))
             matched = genres & interest_set
@@ -4555,8 +4598,30 @@ def predict_next_book(user_id, exclude_ids=None):
                     "overlap": len(matched),
                     "matched_genres": sorted(matched),
                     "date": str(r.get("date") or ""),
+                    "series": series_name or None,
                 }
             )
+
+    # Collapse multi-entry series to a single candidate (the natural-sort first
+    # title in the series) so re-rolls don't keep surfacing different volumes of
+    # the same series. Standalone titles pass through untouched.
+    if candidates:
+        def _natural_key(s):
+            parts = re.split(r"(\d+)", (s or "").lower())
+            return [(int(p), "") if p.isdigit() else (0, p) for p in parts]
+        first_per_series = {}
+        for c in candidates:
+            s = c["series"]
+            if not s or s.lower() == "none":
+                continue
+            current = first_per_series.get(s)
+            if current is None or _natural_key(c["book"]) < _natural_key(current["book"]):
+                first_per_series[s] = c
+        candidates = [
+            c for c in candidates
+            if not c["series"] or c["series"].lower() == "none"
+            or first_per_series.get(c["series"]) is c
+        ]
 
     if not candidates:
         return {
@@ -4584,7 +4649,10 @@ def api_predict_next_book():
     exclude = payload.get("exclude_ids") or []
     if not isinstance(exclude, list):
         exclude = []
-    result = predict_next_book(session["user_id"], exclude_ids=exclude)
+    categories = payload.get("categories")
+    if categories is not None and not isinstance(categories, list):
+        categories = None
+    result = predict_next_book(session["user_id"], exclude_ids=exclude, categories=categories)
     return result
 
 
