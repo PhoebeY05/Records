@@ -1903,10 +1903,17 @@ def _fetch_mal_public_animelist(username, status_code):
                     return datetime.strptime(s, "%d-%m-%y").date()
                 except ValueError:
                     return None
+            genres_field = item.get("genres") or []
+            genre_names = []
+            for g in genres_field:
+                name = (g or {}).get("name") if isinstance(g, dict) else None
+                if name:
+                    genre_names.append(name)
             result[anime_id] = {
                 "updated": updated_date,
                 "start": _parse("anime_start_date_string"),
                 "end": _parse("anime_end_date_string"),
+                "genres": genre_names,
             }
         if len(items) < _MAL_PUBLIC_LIST_PAGE_SIZE:
             break
@@ -5269,6 +5276,30 @@ def api_bulk_suggest_genres(category):
         batch_size,
     )
 
+    # Shows-mode fast path: MAL's public list JSON already exposes per-entry
+    # genres. One cached fetch + in-memory lookups beats spinning up a headless
+    # browser per row. When MAL has no genres for an entry we skip the row
+    # rather than falling back to the slow path — for anime, MAL is the
+    # source of truth, so a miss really does mean "no genres on MAL".
+    shows_fast_path = False
+    mal_genres_by_id = {}
+    xml_lookup = {}
+    if get_site_mode() == "shows":
+        username = get_mal_username_from_xml(session["user_id"])
+        if username:
+            xml_lookup = load_mal_xml_lookup(session["user_id"])
+            if category in _AIRING_MAL_STATUS_CODES:
+                cat_data = _fetch_air_dates_for_category(username, category)
+            elif category == "completed":
+                cat_data = _fetch_mal_public_animelist(username, 2)
+            else:
+                cat_data = {}
+            mal_genres_by_id = {
+                aid: entry.get("genres") or []
+                for aid, entry in cat_data.items()
+            }
+            shows_fast_path = bool(xml_lookup) and bool(mal_genres_by_id)
+
     updated_books = []
     skipped = 0
     for row in rows:
@@ -5276,11 +5307,24 @@ def api_bulk_suggest_genres(category):
         if not title:
             skipped += 1
             continue
-        try:
-            suggestions = infer_genres(title, "")
-        except Exception:
-            suggestions = []
-        genres = [g for g, _score, _src in suggestions if g]
+
+        genres = []
+        if shows_fast_path:
+            aid_str = xml_lookup.get(normalize_book_key(title))
+            if aid_str:
+                try:
+                    aid_int = int(aid_str)
+                except ValueError:
+                    aid_int = None
+                if aid_int is not None:
+                    genres = list(mal_genres_by_id.get(aid_int) or [])
+        else:
+            try:
+                suggestions = infer_genres(title, "")
+            except Exception:
+                suggestions = []
+            genres = [g for g, _score, _src in suggestions if g]
+
         if not genres:
             skipped += 1
             continue
